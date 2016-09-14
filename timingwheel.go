@@ -10,6 +10,11 @@ const (
 	BigTickInterval time.Duration = time.Second
 )
 
+const (
+	TimerDeleteSucceed = iota
+	TimerDeleteFailed
+)
+
 //timingWheel can hold timer for one year
 type timingWheel struct {
 	wheels [5]*wheel
@@ -52,7 +57,7 @@ func (tw *timingWheel) StartTimer(d time.Duration) *Timer {
 	}
 
 	//ticksPerWheel keep ticks for each wheel
-	var ticksPerWheel []int
+	var ticksPerWheel []uint
 	ticks = ticks + tw.wheels[0].curIndex
 	reminder := ticks & (tw.powerSlotsOfWheel0 -1 )
 	quotient := ticks >> tw.powerSlotsOfWheel0
@@ -69,7 +74,8 @@ func (tw *timingWheel) StartTimer(d time.Duration) *Timer {
 	}
 
 	//it decides which wheel should be added
-	ticksPerWheelLength := len(ticksPerWheel)
+	length := len(ticksPerWheel)
+	return tw.wheel[length-1].backN(tickPerWheel[length-1]).addTimer(d, tw.wheel[length-1], tickPerWheel)
 }
 
 func (tw *timingWheel) StartTimerWithTicks(ticks int) *Timer{
@@ -77,7 +83,7 @@ func (tw *timingWheel) StartTimerWithTicks(ticks int) *Timer{
 }
 
 //circular linked list
-type wheel struct {
+type linkSlotswheel struct {
 	tW *timingWheel
 	//pointer to head of slots
 	headSlot *slot
@@ -91,7 +97,7 @@ type wheel struct {
 
 }
 
-func newWheel(numSlotsOfWheel int, tW *timingWheel) *wheel{
+func newlinkSlotsWheel(numSlotsOfWheel int, tW *timingWheel) *linkSlotswheel{
 	headSlot := &slot{headTimer:nil, tailTimer:nil, nextSlot:nil}
 	curSlot := headSlot
 
@@ -104,7 +110,36 @@ func newWheel(numSlotsOfWheel int, tW *timingWheel) *wheel{
 	//redirect curSlot to headSlot
 	curSlot = headSlot
 
-	return &wheel{headSlot:headSlot, curSlot:curSlot, curIndex: 0, numSlots:numSlotsOfWheel, tW: tW}
+	return &linkSlotswheel{headSlot:headSlot, curSlot:curSlot, curIndex: 0, numSlots:numSlotsOfWheel, tW: tW}
+}
+
+type wheel struct{
+	tW *timingWheel
+	slots []*slot
+	curIndex int
+	numSlots int
+}
+
+func newWheel(numSlotsOfWheel int, tW *timingWheel) *wheel {
+	slots := make([]*slot, numSlotsOfWheel)
+	return &wheel{tW: tW, slots: slots, curIndex: 0, numSlots: numSlotsOfWheel}
+}
+
+//back nth slot to return
+func (w *wheel) backN(n uint) *slot {
+	index := n + w.curIndex
+	if index > w.numSlots {
+		return w.slots[index - w.numSlots]
+	}
+	return w.slots[n+w.curIndex]
+}
+
+//increace n to curIndex
+func (w *wheel) incN(n uint) {
+	index := n + w.curIndex
+	if index > w.numSlots {
+		w.curIndex = index - w.numSlots
+	}
 }
 
 type slot struct {
@@ -114,6 +149,8 @@ type slot struct {
 	tailTimer *tWtimer
 	//pointer to next slot in a wheel
 	nextSlot *slot
+	//numTimers
+	numTimers int
 }
 
 func (s *slot) addTimer(d time.Duration, wheel *wheel, ticksPerWheel []int) *Timer {
@@ -132,6 +169,7 @@ func (s *slot) addTimer(d time.Duration, wheel *wheel, ticksPerWheel []int) *Tim
 	s.tailTimer.next = timer
 	timer.prev = s.tailTimer
 	s.tailTimer = timer
+	s.numTimers++
 	return
 }
 
@@ -150,8 +188,47 @@ func (s *slot) addTimerWithHandlers(d time.Duration, wheel *wheel, ticksPerWheel
 	return timer
 }
 
-func (s *slot) delTimer() {
+func (s *slot) delTimer(timer *Timer) int {
 
+	var delflag bool = false
+
+	for temp := s.headTimer; temp != s.tailTimer; temp = temp.next {
+		if temp == timer && temp.next == nil && temp.prev == nil {
+			//only one timer in list
+			s.headTimer = nil
+			s.tailTimer = nil
+			delflag = true
+			break
+		} else if temp == timer && temp.next == nil {
+			//timer is tail timer in list
+			s.tailTimer = temp.prev
+			s.tailTimer.next = nil
+			temp.prev = nil
+			delflag = true
+			break
+		} else if temp == timer && temp.next != nil && temp.prev == nil {
+			//timer is head timer in list
+			s.headTimer = temp.next
+			s.headTimer.prev = nil
+			temp.prev = nil
+			delflag = true
+			break
+		} else if temp == timer {
+			//timer is in middle
+			temp.prev.next = temp.next
+			temp.next.prev = temp.prev
+			temp.next, temp.prev = nil, nil
+			delflag = true
+			break
+		}
+	}
+
+	if !delflag {
+		//no such timer in list
+		return TimerDeleteFailed
+	}
+	s.numTimers--
+	return TimerDeleteSucceed
 }
 
 //doubly linked list
