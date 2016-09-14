@@ -11,22 +11,26 @@ const (
 
 type TimerID int64
 
-type TimerHander func(data interface{})
+type TimerHandler func(data interface{})
 
 type baseTimer struct {
-	timerMngr *TimerCenter
+	timerCenter *TimerCenter
 	d time.Duration
 	data interface{}
 	timerId TimerID
 	expiryHandlers []TimerHandler
 }
 
-func (t *BaseTimer) ResetData(data interface{}) {
+func (t *baseTimer) ResetData(data interface{}) {
 	t.data = data
 }
 
-func (t *BaseTimer) AddHander(handler TimerHandler) {
-	t.expiryHandlers = append(t.expiryHanders, handler)
+func (t *baseTimer) AddHandler(handler TimerHandler) {
+	t.expiryHandlers = append(t.expiryHandlers, handler)
+}
+
+func (t *baseTimer) AddHandlers(handler []TimerHandler) {
+	t.expiryHandlers = append(t.expiryHandlers, handler)
 }
 
 type Timer interface {
@@ -40,9 +44,9 @@ type Timer interface {
 type TimerCenter interface {
 	StartTimer(d time.Duration) *Timer
 
-	StartTimerWithHander(d time.Duration, data interface{}, handler TimerHander) *Timer
+	StartTimerWithHandler(d time.Duration, data interface{}, handler TimerHandler) *Timer
 
-	StartTimerWithHanders(d time.Duration, data interface{}, hander []TimerHander) *Timer
+	StartTimerWithHandlers(d time.Duration, data interface{}, handler []TimerHandler) *Timer
 
 	StartTimerWithActions(d time.Duration, data interface{}, actions Actions) *Timer
 
