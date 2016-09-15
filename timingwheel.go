@@ -2,6 +2,7 @@ package gotimer
 
 import (
 	"time"
+	"sync"
 )
 
 const (
@@ -20,8 +21,8 @@ type timingWheel struct {
 	wheels [5]*wheel
 	interval time.Duration
 
-	powerSlotsOfWheel0 int
-	powerSlotsOfWheelN int
+	powerSlotsOfWheel0 uint
+	powerSlotsOfWheelN uint
 }
 
 func newTimingWheel(interval time.Duration) *timingWheel{
@@ -48,38 +49,93 @@ func newTimingWheel(interval time.Duration) *timingWheel{
 	return tw
 }
 
-func (tw *timingWheel) StartTimer(d time.Duration) *Timer {
-	var ticks int
+//original timer generate tick
+func (tw *timingWheel) originalTimer(){
+	ot := time.NewTicker(tw.interval)
+}
+
+func (tw *timingWheel) StartTimer(d time.Duration) Timer {
+	var ticks uint
 	if d < MinTickInterval {
 		ticks = 1
 	} else {
-		ticks = d/tw.interval
+		ticks = (uint)(d/tw.interval)
 	}
 
-	//ticksPerWheel keep ticks for each wheel
-	var ticksPerWheel []uint
-	ticks = ticks + tw.wheels[0].curIndex
-	reminder := ticks & (tw.powerSlotsOfWheel0 -1 )
+	//ipw keep ticks indexes for each wheel
+	ipw := tw.indexesPerWheel(ticks)
+	//it decides which wheel should be added
+	length := len(ipw)
+	return tw.wheels[length-1].backN(ipw[length-1]).addTimer(d, tw.wheels[length-1], ipw)
+}
+
+func (tw *timingWheel) StartTimerInTicks(ticks uint) Timer{
+	ipw := tw.indexesPerWheel(ticks)
+	length := len(ipw)
+	return tw.wheels[length-1].backN(ipw[length-1]).addTimer(time.Duration(ticks)*tw.interval, tw.wheels[length-1], ipw)
+}
+
+func (tw *timingWheel) StartTimerWithHandler(d time.Duration, data interface{}, handler TimerHandler) Timer {
+	var ticks uint
+	if d < MinTickInterval {
+		ticks = 1
+	} else {
+		ticks = (uint)(d/tw.interval)
+	}
+
+	ipw := tw.indexesPerWheel(ticks)
+	length := len(ipw)
+	return tw.wheels[length-1].backN(ipw[length-1]).addTimerWithHandler(d, tw.wheels[length-1], ipw, data, handler)
+
+}
+
+func (tw *timingWheel) StartTimerWithHandlers(d time.Duration, data interface{}, handlers []TimerHandler) Timer {
+	var ticks uint
+	if d < MinTickInterval {
+		ticks = 1
+	} else {
+		ticks = (uint)(d/tw.interval)
+	}
+
+	ipw := tw.indexesPerWheel(ticks)
+	length := len(ipw)
+	return tw.wheels[length-1].backN(ipw[length-1]).addTimerWithHandlers(d, tw.wheels[length-1], ipw, data, handlers)
+}
+
+func (tw *timingWheel) StartTimerWithActions(d time.Duration, data interface{}, actions Actions) Timer {
+	var ticks uint
+	if d < MinTickInterval {
+		ticks = 1
+	} else {
+		ticks = (uint)(d/tw.interval)
+	}
+
+	ipw := tw.indexesPerWheel(ticks)
+	length := len(ipw)
+	return tw.wheels[length-1].backN(ipw[length-1]).addTimerWithHandler(d, tw.wheels[length-1], ipw, data, actions.Expiry)
+}
+
+func (tw *timingWheel) StopTimer(timer Timer) {
+
+}
+
+func (tw *timingWheel) indexesPerWheel(ticks uint) []uint {
+	var ipw []uint
+	ticks += tw.wheels[0].curIndex
+	reminder := ticks & (tw.powerSlotsOfWheel0 -1)
 	quotient := ticks >> tw.powerSlotsOfWheel0
-	ticksPerWheel = append(ticksPerWheel, reminder)
+	ipw = append(ipw, reminder)
 
 	for i:=1; i<5; i++ {
 		if quotient == 0 {
 			break
 		}
 		quotient += tw.wheels[i].curIndex
-		reminder = quotient & (tw.powerSlotsOfWheelN -1)
-		quotient = qutient >> tw.powerSlotsOfWheelN
-		ticksPerWheel = append(ticksPerWheel, reminder)
+		reminder = quotient & (tw.powerSlotsOfWheelN-1)
+		quotient = quotient >> tw.powerSlotsOfWheelN
+		ipw = append(ipw, reminder)
 	}
-
-	//it decides which wheel should be added
-	length := len(ticksPerWheel)
-	return tw.wheel[length-1].backN(tickPerWheel[length-1]).addTimer(d, tw.wheel[length-1], tickPerWheel)
-}
-
-func (tw *timingWheel) StartTimerWithTicks(ticks int) *Timer{
-
+	return ipw
 }
 
 //circular linked list
@@ -103,10 +159,10 @@ func newlinkSlotsWheel(numSlotsOfWheel int, tW *timingWheel) *linkSlotswheel{
 
 	for i:=0; i<numSlotsOfWheel-1; i++ {
 		tempSlot := &slot{headTimer:nil, tailTimer:nil, nextSlot:nil}
-		curSlot.next = tempSlot
-		curSlot = curSlot.next
+		curSlot.nextSlot = tempSlot
+		curSlot = curSlot.nextSlot
 	}
-	curSlot.next = headSlot
+	curSlot.nextSlot = headSlot
 	//redirect curSlot to headSlot
 	curSlot = headSlot
 
@@ -116,11 +172,11 @@ func newlinkSlotsWheel(numSlotsOfWheel int, tW *timingWheel) *linkSlotswheel{
 type wheel struct{
 	tW *timingWheel
 	slots []*slot
-	curIndex int
-	numSlots int
+	curIndex uint
+	numSlots uint
 }
 
-func newWheel(numSlotsOfWheel int, tW *timingWheel) *wheel {
+func newWheel(numSlotsOfWheel uint, tW *timingWheel) *wheel {
 	slots := make([]*slot, numSlotsOfWheel)
 	return &wheel{tW: tW, slots: slots, curIndex: 0, numSlots: numSlotsOfWheel}
 }
@@ -151,14 +207,18 @@ type slot struct {
 	nextSlot *slot
 	//numTimers
 	numTimers int
+
+	slotMu *sync.Mutex
 }
 
-func (s *slot) addTimer(d time.Duration, wheel *wheel, ticksPerWheel []int) *Timer {
+func (s *slot) addTimer(d time.Duration, wheel *wheel, ipw []uint) Timer {
 
-	timer := &tWtimer{wheel: wheel, slot: slot, ticksPerWheel: ticksPerWheel}
+	timer := &tWtimer{wheel: wheel, slot: s, ipw: ipw}
 	timer.d = d
-	timer.timerCenter = wheel.timingWheel
+	timer.timerCenter = wheel.tW
 
+	s.slotMu.Lock()
+	defer s.slotMu.Unlock()
 	if s.headTimer == nil {
 		s.headTimer = timer
 		s.tailTimer = timer
@@ -170,27 +230,29 @@ func (s *slot) addTimer(d time.Duration, wheel *wheel, ticksPerWheel []int) *Tim
 	timer.prev = s.tailTimer
 	s.tailTimer = timer
 	s.numTimers++
-	return
+	return timer
 }
 
-func (s *slot) addTimerWithHandler(d time.Duration, wheel *wheel, ticksPerWheel []int, data interface{}, handler TimerHandler) *Timer {
-	timer := s.addTimer(d, wheel, ticksPerWheel)
+func (s *slot) addTimerWithHandler(d time.Duration, wheel *wheel, ipw []uint, data interface{}, handler TimerHandler) Timer {
+	timer := s.addTimer(d, wheel, ipw)
 	timer.ResetData(data)
 	timer.AddHandler(handler)
-	timer
+	return timer
 }
 
-func (s *slot) addTimerWithHandlers(d time.Duration, wheel *wheel, ticksPerWheel []int, data interface{}, handlers []TimerHandler) *Timer {
+func (s *slot) addTimerWithHandlers(d time.Duration, wheel *wheel, ipw []uint, data interface{}, handlers []TimerHandler) Timer {
 
-	timer := s.addTimer(d, wheel, ticksPerWheel)
+	timer := s.addTimer(d, wheel, ipw)
 	timer.ResetData(data)
 	timer.AddHandlers(handlers)
 	return timer
 }
 
-func (s *slot) delTimer(timer *Timer) int {
+func (s *slot) delTimer(timer Timer) int {
 
 	var delflag bool = false
+	s.slotMu.Lock()
+	defer s.slotMu.Unlock()
 
 	for temp := s.headTimer; temp != s.tailTimer; temp = temp.next {
 		if temp == timer && temp.next == nil && temp.prev == nil {
@@ -243,5 +305,14 @@ type tWtimer struct {
 	baseTimer
 	prev *tWtimer
 	next *tWtimer
-	ticksPerWheel []int
+	ipw []uint //indexes per wheel, 
+	expired bool
+}
+
+func (t *tWtimer) Stop() {
+
+}
+
+func (t *tWtimer) Delay(d time.Duration) {
+
 }
