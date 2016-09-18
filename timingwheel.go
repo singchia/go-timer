@@ -23,6 +23,8 @@ type timingWheel struct {
 
 	powerSlotsOfWheel0 uint
 	powerSlotsOfWheelN uint
+
+	ticks chan time.Time
 }
 
 func newTimingWheel(interval time.Duration) *timingWheel{
@@ -46,15 +48,29 @@ func newTimingWheel(interval time.Duration) *timingWheel{
 		tw.wheels[i] = newWheel(1 << tw.powerSlotsOfWheelN, tw)
 	}
 	tw.interval = interval
+	tw.ticks = make(chan Time, )
 	return tw
+}
+
+func (tw *timingWheel) StartTimer() error {
+
+}
+
+func (tw *timingWheel) StopTimer() error {
+
+}
+
+func (tw *timingWheel) SetMaxGoRoutines(num int) {
+
 }
 
 //original timer generate tick
 func (tw *timingWheel) originalTimer(){
 	ot := time.NewTicker(tw.interval)
+
 }
 
-func (tw *timingWheel) StartTimer(d time.Duration) Timer {
+func (tw *timingWheel) AddTimer(d time.Duration) Timer {
 	var ticks uint
 	if d < MinTickInterval {
 		ticks = 1
@@ -69,13 +85,13 @@ func (tw *timingWheel) StartTimer(d time.Duration) Timer {
 	return tw.wheels[length-1].backN(ipw[length-1]).addTimer(d, tw.wheels[length-1], ipw)
 }
 
-func (tw *timingWheel) StartTimerInTicks(ticks uint) Timer{
+func (tw *timingWheel) AddTimerInTicks(ticks uint) Timer{
 	ipw := tw.indexesPerWheel(ticks)
 	length := len(ipw)
 	return tw.wheels[length-1].backN(ipw[length-1]).addTimer(time.Duration(ticks)*tw.interval, tw.wheels[length-1], ipw)
 }
 
-func (tw *timingWheel) StartTimerWithHandler(d time.Duration, data interface{}, handler TimerHandler) Timer {
+func (tw *timingWheel) AddTimerWithHandler(d time.Duration, data interface{}, handler TimerHandler) Timer {
 	var ticks uint
 	if d < MinTickInterval {
 		ticks = 1
@@ -89,7 +105,7 @@ func (tw *timingWheel) StartTimerWithHandler(d time.Duration, data interface{}, 
 
 }
 
-func (tw *timingWheel) StartTimerWithHandlers(d time.Duration, data interface{}, handlers []TimerHandler) Timer {
+func (tw *timingWheel) AddTimerWithHandlers(d time.Duration, data interface{}, handlers []TimerHandler) Timer {
 	var ticks uint
 	if d < MinTickInterval {
 		ticks = 1
@@ -102,7 +118,7 @@ func (tw *timingWheel) StartTimerWithHandlers(d time.Duration, data interface{},
 	return tw.wheels[length-1].backN(ipw[length-1]).addTimerWithHandlers(d, tw.wheels[length-1], ipw, data, handlers)
 }
 
-func (tw *timingWheel) StartTimerWithActions(d time.Duration, data interface{}, actions Actions) Timer {
+func (tw *timingWheel) AddTimerWithActions(d time.Duration, data interface{}, actions Actions) Timer {
 	var ticks uint
 	if d < MinTickInterval {
 		ticks = 1

@@ -41,17 +41,41 @@ type Timer interface {
 	Delay(d time.Duration)
 }
 
-//for managering timers
+//TimerCenter is a interface for managering basic timers,
+//for now, only timingWheel implements the interface,
+//users can create a timingWheel instance by calling 
+//NewTimerCenter("gotimer.TimingWheel"), it's kind of
+//factory method, users can add timer to TimerCenter with 
+//no actions, it means when timer is up, TimerCenter will 
+//delete it with no actions. or users can add timer with 
+//one or more TimerHandler, when timer is up, timer's all 
+//TimerHandler will be called. Additional, users can 
+//implements Actions interface, the method Expiry is one 
+//of the interface, this will evetual be regarded as 
+//TimerHanderl. TimerCenter won't start until StartTimer
+//be called, it won't stop until StopTimer be called.
 type TimerCenter interface {
-	StartTimer(d time.Duration) Timer
+	//
+	AddTimer(d time.Duration) Timer
 
-	StartTimerWithHandler(d time.Duration, data interface{}, handler TimerHandler) Timer
+	AddTimerWithHandler(d time.Duration, data interface{}, handler TimerHandler) Timer
 
-	StartTimerWithHandlers(d time.Duration, data interface{}, handler []TimerHandler) Timer
+	AddTimerWithHandlers(d time.Duration, data interface{}, handler []TimerHandler) Timer
 
-	StartTimerWithActions(d time.Duration, data interface{}, actions Actions) Timer
+	AddTimerWithActions(d time.Duration, data interface{}, actions Actions) Timer
 
-	StopTimer(timer Timer)
+	DelTimer(timer Timer)
+
+	//TimerCenter won't start until StartTimer be called
+	StartTimer() error
+
+	//TimerCenter won't stop until StopTimer be called
+	StopTimer() error
+
+	//set max amount of goroutines that handle TimerHandler,
+	//a new groutine will be started when exist routines are 
+	//in busy, num < 0 means unlimited
+	SetMaxGoRoutines(num int)
 }
 
 func NewTimerCenter(timerType string) TimerCenter {
