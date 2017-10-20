@@ -1,8 +1,8 @@
 package gotimer
 
 import (
-	"time"
 	"sync"
+	"time"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 
 //timingWheel can hold timer for one year
 type timingWheel struct {
-	wheels [5]*wheel
+	wheels   [5]*wheel
 	interval time.Duration
 
 	powerSlotsOfWheel0 uint
@@ -27,7 +27,7 @@ type timingWheel struct {
 	ticks chan time.Time
 }
 
-func newTimingWheel(interval time.Duration) *timingWheel{
+func newTimingWheel(interval time.Duration) *timingWheel {
 	if interval < MinTickInterval {
 		return nil
 	}
@@ -40,15 +40,15 @@ func newTimingWheel(interval time.Duration) *timingWheel{
 		tw.powerSlotsOfWheelN = 6
 	}
 
-	for i:=0; i<len(tw.wheels); i++ {
+	for i := 0; i < len(tw.wheels); i++ {
 		if i == 0 {
-			tw.wheels[0] = newWheel(1 << tw.powerSlotsOfWheel0, tw)
+			tw.wheels[0] = newWheel(1<<tw.powerSlotsOfWheel0, tw)
 			continue
 		}
-		tw.wheels[i] = newWheel(1 << tw.powerSlotsOfWheelN, tw)
+		tw.wheels[i] = newWheel(1<<tw.powerSlotsOfWheelN, tw)
 	}
 	tw.interval = interval
-	tw.ticks = make(chan Time, )
+	tw.ticks = make(chan Time)
 	return tw
 }
 
@@ -65,7 +65,7 @@ func (tw *timingWheel) SetMaxGoRoutines(num int) {
 }
 
 //original timer generate tick
-func (tw *timingWheel) originalTimer(){
+func (tw *timingWheel) originalTimer() {
 	ot := time.NewTicker(tw.interval)
 
 }
@@ -75,7 +75,7 @@ func (tw *timingWheel) AddTimer(d time.Duration) Timer {
 	if d < MinTickInterval {
 		ticks = 1
 	} else {
-		ticks = (uint)(d/tw.interval)
+		ticks = (uint)(d / tw.interval)
 	}
 
 	//ipw keep ticks indexes for each wheel
@@ -85,7 +85,7 @@ func (tw *timingWheel) AddTimer(d time.Duration) Timer {
 	return tw.wheels[length-1].backN(ipw[length-1]).addTimer(d, tw.wheels[length-1], ipw)
 }
 
-func (tw *timingWheel) AddTimerInTicks(ticks uint) Timer{
+func (tw *timingWheel) AddTimerInTicks(ticks uint) Timer {
 	ipw := tw.indexesPerWheel(ticks)
 	length := len(ipw)
 	return tw.wheels[length-1].backN(ipw[length-1]).addTimer(time.Duration(ticks)*tw.interval, tw.wheels[length-1], ipw)
@@ -96,7 +96,7 @@ func (tw *timingWheel) AddTimerWithHandler(d time.Duration, data interface{}, ha
 	if d < MinTickInterval {
 		ticks = 1
 	} else {
-		ticks = (uint)(d/tw.interval)
+		ticks = (uint)(d / tw.interval)
 	}
 
 	ipw := tw.indexesPerWheel(ticks)
@@ -110,25 +110,12 @@ func (tw *timingWheel) AddTimerWithHandlers(d time.Duration, data interface{}, h
 	if d < MinTickInterval {
 		ticks = 1
 	} else {
-		ticks = (uint)(d/tw.interval)
+		ticks = (uint)(d / tw.interval)
 	}
 
 	ipw := tw.indexesPerWheel(ticks)
 	length := len(ipw)
 	return tw.wheels[length-1].backN(ipw[length-1]).addTimerWithHandlers(d, tw.wheels[length-1], ipw, data, handlers)
-}
-
-func (tw *timingWheel) AddTimerWithActions(d time.Duration, data interface{}, actions Actions) Timer {
-	var ticks uint
-	if d < MinTickInterval {
-		ticks = 1
-	} else {
-		ticks = (uint)(d/tw.interval)
-	}
-
-	ipw := tw.indexesPerWheel(ticks)
-	length := len(ipw)
-	return tw.wheels[length-1].backN(ipw[length-1]).addTimerWithHandler(d, tw.wheels[length-1], ipw, data, actions.Expiry)
 }
 
 func (tw *timingWheel) StopTimer(timer Timer) {
@@ -138,16 +125,16 @@ func (tw *timingWheel) StopTimer(timer Timer) {
 func (tw *timingWheel) indexesPerWheel(ticks uint) []uint {
 	var ipw []uint
 	ticks += tw.wheels[0].curIndex
-	reminder := ticks & (tw.powerSlotsOfWheel0 -1)
+	reminder := ticks & (tw.powerSlotsOfWheel0 - 1)
 	quotient := ticks >> tw.powerSlotsOfWheel0
 	ipw = append(ipw, reminder)
 
-	for i:=1; i<5; i++ {
+	for i := 1; i < 5; i++ {
 		if quotient == 0 {
 			break
 		}
 		quotient += tw.wheels[i].curIndex
-		reminder = quotient & (tw.powerSlotsOfWheelN-1)
+		reminder = quotient & (tw.powerSlotsOfWheelN - 1)
 		quotient = quotient >> tw.powerSlotsOfWheelN
 		ipw = append(ipw, reminder)
 	}
@@ -162,19 +149,18 @@ type linkSlotswheel struct {
 	//pointer to tail of slots, it should be same with headSlot
 	//tailSlot *slot
 	//pointer to current slot
-	curSlot *slot
+	curSlot  *slot
 	curIndex int
 
 	numSlots int
-
 }
 
-func newlinkSlotsWheel(numSlotsOfWheel int, tW *timingWheel) *linkSlotswheel{
-	headSlot := &slot{headTimer:nil, tailTimer:nil, nextSlot:nil}
+func newlinkSlotsWheel(numSlotsOfWheel int, tW *timingWheel) *linkSlotswheel {
+	headSlot := &slot{headTimer: nil, tailTimer: nil, nextSlot: nil}
 	curSlot := headSlot
 
-	for i:=0; i<numSlotsOfWheel-1; i++ {
-		tempSlot := &slot{headTimer:nil, tailTimer:nil, nextSlot:nil}
+	for i := 0; i < numSlotsOfWheel-1; i++ {
+		tempSlot := &slot{headTimer: nil, tailTimer: nil, nextSlot: nil}
 		curSlot.nextSlot = tempSlot
 		curSlot = curSlot.nextSlot
 	}
@@ -182,12 +168,12 @@ func newlinkSlotsWheel(numSlotsOfWheel int, tW *timingWheel) *linkSlotswheel{
 	//redirect curSlot to headSlot
 	curSlot = headSlot
 
-	return &linkSlotswheel{headSlot:headSlot, curSlot:curSlot, curIndex: 0, numSlots:numSlotsOfWheel, tW: tW}
+	return &linkSlotswheel{headSlot: headSlot, curSlot: curSlot, curIndex: 0, numSlots: numSlotsOfWheel, tW: tW}
 }
 
-type wheel struct{
-	tW *timingWheel
-	slots []*slot
+type wheel struct {
+	tW       *timingWheel
+	slots    []*slot
 	curIndex uint
 	numSlots uint
 }
@@ -201,7 +187,7 @@ func newWheel(numSlotsOfWheel uint, tW *timingWheel) *wheel {
 func (w *wheel) backN(n uint) *slot {
 	index := n + w.curIndex
 	if index > w.numSlots {
-		return w.slots[index - w.numSlots]
+		return w.slots[index-w.numSlots]
 	}
 	return w.slots[n+w.curIndex]
 }
@@ -319,9 +305,9 @@ type tWtimer struct {
 	//tW *timingWheel
 
 	baseTimer
-	prev *tWtimer
-	next *tWtimer
-	ipw []uint //indexes per wheel, 
+	prev    *tWtimer
+	next    *tWtimer
+	ipw     []uint //indexes per wheel,
 	expired bool
 }
 
