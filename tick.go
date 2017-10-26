@@ -45,7 +45,11 @@ func (s *slot) remove() *doublinker.Doublinker {
 	return temp
 }
 
-type Handler func(interface{}) error
+func (s *slot) foreach(handler doublinker.ForeachFunc) error {
+	return s.dlinker.Foreach(handler)
+}
+
+type Handler func(data interface{}) error
 
 //the real shit
 type Tick struct {

@@ -2,9 +2,10 @@ package timer
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
-	"github.com/singchia/go-hammer/doublinker"
+	simplejson "github.com/bitly/go-simplejson"
 	scheduler "github.com/singchia/go-scheduler"
 )
 
@@ -20,7 +21,7 @@ type timingwheel struct {
 	interval time.Duration
 	signal   chan struct{}
 	max      uint64
-	sch      scheduler.Scheduler
+	sch      *scheduler.Scheduler
 }
 
 func newTimingwheel() *timingwheel {
@@ -45,9 +46,15 @@ func (t *timingwheel) time(d uint64, data interface{}, C chan interface{}, handl
 	if d == 0 || d > t.max-1 {
 		return nil, errors.New("invalid duration")
 	}
+	if data == nil {
+		return nil, errors.New("invalid data")
+	}
+	if C == nil && handler == nil {
+		C = make(chan interface{}, 1)
+	}
 	ipw := t.indexesPerWheel(d)
 	tick := &Tick{data: data, C: C, handler: handler, ipw: ipw, duration: d}
-	t.wheels[len(ipw)-1].add(ipw[len(ipw-1)], tick)
+	t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
 	return tick, nil
 }
 
@@ -55,34 +62,75 @@ func (t *timingwheel) start() {
 	if t.wheels == nil {
 		t.setMaxTicks(DefaultMaxTicks)
 	}
-	go func() {
-		driver := time.NewTicker(t.interval)
+	go t.drive()
+	return
+}
+
+func (t *timingwheel) pause() {
+	t.signal <- struct{}{}
+	return
+}
+
+func (t *timingwheel) moveon() {
+	go t.drive()
+}
+
+func (t *timingwheel) stop() {
+	t.signal <- struct{}{}
+	t.wheels = nil
+	t.sch.Close()
+}
+
+func (t *timingwheel) drive() {
+	driver := time.NewTicker(t.interval)
+	for {
 		select {
 		case <-driver.C:
 			for _, wheel := range t.wheels {
-				//the linker is the list of Tickers
 				linker := wheel.incN(1)
-				t.sch.PublishRequest(&scheduler.Request{Data: linker, Handler: t.handler})
+				linker.Foreach(t.iterate)
+				if wheel.cur != 0 {
+					break
+				}
 			}
-		case t.signal:
-			//TODO
+		case <-t.signal:
+			return
 		}
-	}()
+	}
+	return
 }
 
-func (t *timingwheel) handler(data interface{}) error {
-	linker, ok := data.(*doublinker.Doublinker)
-	//TODO
+func (t *timingwheel) iterate(data interface{}) error {
+	t.sch.PublishRequest(&scheduler.Request{Data: data, Handler: t.handle})
+	return nil
+}
+
+func (t *timingwheel) handle(data interface{}) {
+	tick, _ := data.(*Tick)
+	position := tick.s.w.position
+	for position > 0 {
+		position--
+		if tick.ipw[position] > 0 {
+			t.wheels[position].add(tick.ipw[position], tick)
+			return
+		}
+	}
+	if tick.C == nil {
+		tick.handler(tick.data)
+	} else {
+		tick.C <- tick.data
+	}
 }
 
 func (t *timingwheel) indexesPerWheel(d uint64) []uint {
 	var ipw []uint
 	var reminder uint64
 	var quotient = d
-	for _, wheel := range t.wheels {
+	for i, wheel := range t.wheels {
 		if quotient == 0 {
 			break
 		}
+		quotient += uint64(t.wheels[i].cur)
 		reminder = quotient % uint64(wheel.numSlots)
 		quotient = quotient / uint64(wheel.numSlots)
 		ipw = append(ipw, uint(reminder))
@@ -107,4 +155,29 @@ func calcuQuotients(num uint64) []uint {
 		num = quo
 	}
 	return quos
+}
+
+//for debug
+func (t *timingwheel) topology() ([]byte, error) {
+	j := simplejson.New()
+	var ws []*simplejson.Json
+	for i, wheel := range t.wheels {
+		var ss []*simplejson.Json
+		for j, slot := range wheel.slots {
+			var ts []interface{}
+			slot.foreach(func(data interface{}) error {
+				t := data.(*Tick)
+				ts = append(ts, t.data)
+				return nil
+			})
+			s := simplejson.New()
+			s.Set(fmt.Sprintf("slot%d", j), ts)
+			ss = append(ss, s)
+		}
+		w := simplejson.New()
+		w.Set(fmt.Sprintf("wheel%d", i), ss)
+		ws = append(ws, w)
+	}
+	j.Set("wheels", ws)
+	return j.MarshalJSON()
 }
