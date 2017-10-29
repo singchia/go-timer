@@ -7,6 +7,8 @@ import (
 )
 
 type wheel struct {
+	//keep the reference to for Tick(Tick-->slot-->wheel-->timingwheel-->wheels)
+	tw       *timingwheel
 	slots    []*slot
 	cur      uint
 	numSlots uint

@@ -138,6 +138,22 @@ func (t *timingwheel) indexesPerWheel(d uint64) []uint {
 	return ipw
 }
 
+func (t *timingwheel) indexesPerWheelBased(d uint64, base []uint) []uint {
+	var ipw []uint
+	var reminder uint64
+	var quotient = d
+	for i, wheel := range t.wheels {
+		if quotient == 0 {
+			break
+		}
+		quotient += uint64(base[i].cur)
+		reminder = quotient % uint64(wheel.numSlots)
+		quotient = quotient / uint64(wheel.numSlots)
+		ipw = append(ipw, uint(reminder))
+	}
+	return ipw
+}
+
 func calcuQuotients(num uint64) []uint {
 	var quos []uint
 	for {
