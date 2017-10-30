@@ -58,6 +58,14 @@ func (t *timingwheel) time(d uint64, data interface{}, C chan interface{}, handl
 	return tick, nil
 }
 
+func (t *timingwheel) timeBased(d uint64, tick *Tick) (*Tick, error) {
+	ipw := t.indexesPerWheelBased(d, tick.ipw)
+	tick.ipw = ipw
+	tick.duration += d
+	t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
+	return tick, nil
+}
+
 func (t *timingwheel) start() {
 	if t.wheels == nil {
 		t.setMaxTicks(DefaultMaxTicks)

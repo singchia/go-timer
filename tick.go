@@ -70,6 +70,7 @@ func (t *Tick) Cancel() error {
 	return t.s.delete(t)
 }
 
-func (t *Tick) Delay() error {
-	return nil
+func (t *Tick) Delay(d uint64) error {
+	_, err := t.s.w.tw.timeBased(d, t)
+	return err
 }
