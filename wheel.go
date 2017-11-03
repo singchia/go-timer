@@ -29,7 +29,7 @@ func newWheel(numSlots uint, position uint) *wheel {
 	return wil
 }
 
-func (w *wheel) add(n uint, tick *Tick) *Tick {
+func (w *wheel) add(n uint, tick *tick) *tick {
 	w.wheelMutex.RLock()
 	defer w.wheelMutex.RUnlock()
 	return w.slots[n].add(tick)

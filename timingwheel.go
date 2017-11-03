@@ -28,7 +28,7 @@ func newTimingwheel() *timingwheel {
 	return &timingwheel{interval: DefaultTickInterval, sch: scheduler.NewScheduler()}
 }
 
-func (t *timingwheel) setMaxTicks(max uint64) {
+func (t *timingwheel) SetMaxTicks(max uint64) {
 	t.max = max
 	nums := calcuQuotients(max)
 	t.wheels = make([]*wheel, 0, len(nums))
@@ -38,11 +38,11 @@ func (t *timingwheel) setMaxTicks(max uint64) {
 	return
 }
 
-func (t *timingwheel) setInterval(interval time.Duration) {
+func (t *timingwheel) SetInterval(interval time.Duration) {
 	t.interval = interval
 }
 
-func (t *timingwheel) time(d uint64, data interface{}, C chan interface{}, handler Handler) (*Tick, error) {
+func (t *timingwheel) Time(d uint64, data interface{}, C chan interface{}, handler Handler) (Tick, error) {
 	if d == 0 || d > t.max-1 {
 		return nil, errors.New("invalid duration")
 	}
@@ -53,12 +53,12 @@ func (t *timingwheel) time(d uint64, data interface{}, C chan interface{}, handl
 		C = make(chan interface{}, 1)
 	}
 	ipw := t.indexesPerWheel(d)
-	tick := &Tick{data: data, C: C, handler: handler, ipw: ipw, duration: d}
+	tick := &tick{data: data, C: C, handler: handler, ipw: ipw, duration: d}
 	t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
 	return tick, nil
 }
 
-func (t *timingwheel) timeBased(d uint64, tick *Tick) (*Tick, error) {
+func (t *timingwheel) timeBased(d uint64, tick *tick) (*tick, error) {
 	ipw := t.indexesPerWheelBased(d, tick.ipw)
 	tick.ipw = ipw
 	tick.duration += d
@@ -66,24 +66,24 @@ func (t *timingwheel) timeBased(d uint64, tick *Tick) (*Tick, error) {
 	return tick, nil
 }
 
-func (t *timingwheel) start() {
+func (t *timingwheel) Start() {
 	if t.wheels == nil {
-		t.setMaxTicks(DefaultMaxTicks)
+		t.SetMaxTicks(DefaultMaxTicks)
 	}
 	go t.drive()
 	return
 }
 
-func (t *timingwheel) pause() {
+func (t *timingwheel) Pause() {
 	t.signal <- struct{}{}
 	return
 }
 
-func (t *timingwheel) moveon() {
+func (t *timingwheel) Moveon() {
 	go t.drive()
 }
 
-func (t *timingwheel) stop() {
+func (t *timingwheel) Stop() {
 	t.signal <- struct{}{}
 	t.wheels = nil
 	t.sch.Close()
@@ -114,7 +114,7 @@ func (t *timingwheel) iterate(data interface{}) error {
 }
 
 func (t *timingwheel) handle(data interface{}) {
-	tick, _ := data.(*Tick)
+	tick, _ := data.(*tick)
 	position := tick.s.w.position
 	for position > 0 {
 		position--
@@ -154,7 +154,7 @@ func (t *timingwheel) indexesPerWheelBased(d uint64, base []uint) []uint {
 		if quotient == 0 {
 			break
 		}
-		quotient += uint64(base[i].cur)
+		quotient += uint64(base[i])
 		reminder = quotient % uint64(wheel.numSlots)
 		quotient = quotient / uint64(wheel.numSlots)
 		ipw = append(ipw, uint(reminder))
@@ -182,7 +182,7 @@ func calcuQuotients(num uint64) []uint {
 }
 
 //for debug
-func (t *timingwheel) topology() ([]byte, error) {
+func (t *timingwheel) Topology() ([]byte, error) {
 	j := simplejson.New()
 	var ws []*simplejson.Json
 	for i, wheel := range t.wheels {
@@ -190,7 +190,7 @@ func (t *timingwheel) topology() ([]byte, error) {
 		for j, slot := range wheel.slots {
 			var ts []interface{}
 			slot.foreach(func(data interface{}) error {
-				t := data.(*Tick)
+				t := data.(*tick)
 				ts = append(ts, t.data)
 				return nil
 			})

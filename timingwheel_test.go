@@ -19,7 +19,7 @@ func Test_calcuQuotients(t *testing.T) {
 
 func Test_indexesPerWheel(t *testing.T) {
 	tw := &timingwheel{}
-	tw.setMaxTicks(1000)
+	tw.SetMaxTicks(1000)
 	ipw := tw.indexesPerWheel(1023)
 	t.Log(ipw)
 	return
@@ -27,18 +27,18 @@ func Test_indexesPerWheel(t *testing.T) {
 
 func Test_topology(t *testing.T) {
 	tw := newTimingwheel()
-	tw.start()
+	tw.Start()
 	ch := make(chan interface{})
 	old := time.Now()
-	tw.time(5, 1, ch, nil)
-	tw.time(5, 2, ch, nil)
-	tw.time(25, 3, ch, nil)
-	tw.time(250, 4, ch, nil)
-	tw.time(250, 5, ch, nil)
-	tw.time(250, 6, ch, nil)
-	tw.time(10000, 7, ch, nil)
-	tw.time(10000, 8, ch, nil)
-	topo, err := tw.topology()
+	tw.Time(5, 1, ch, nil)
+	tw.Time(5, 2, ch, nil)
+	tw.Time(25, 3, ch, nil)
+	tw.Time(250, 4, ch, nil)
+	tw.Time(250, 5, ch, nil)
+	tw.Time(250, 6, ch, nil)
+	tw.Time(10000, 7, ch, nil)
+	tw.Time(10000, 8, ch, nil)
+	topo, err := tw.Topology()
 	if err != nil {
 		t.Errorf(err.Error())
 		return

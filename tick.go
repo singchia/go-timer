@@ -16,7 +16,7 @@ func newSlot(w *wheel) *slot {
 	return &slot{w: w, dlinker: doublinker.NewDoublinker()}
 }
 
-func (s *slot) add(tick *Tick) *Tick {
+func (s *slot) add(tick *tick) *tick {
 	s.slotMutex.RLock()
 	defer s.slotMutex.RUnlock()
 
@@ -26,13 +26,13 @@ func (s *slot) add(tick *Tick) *Tick {
 	return tick
 }
 
-func (s *slot) delete(tick *Tick) error {
+func (s *slot) delete(tick *tick) error {
 	s.slotMutex.RLock()
 	defer s.slotMutex.RUnlock()
 	return s.dlinker.Delete(tick.id)
 }
 
-func (s *slot) update(tick *Tick, data interface{}) error {
+func (s *slot) update(tick *tick, data interface{}) error {
 	tick.data = data
 	return nil
 }
@@ -52,7 +52,7 @@ func (s *slot) foreach(handler doublinker.ForeachFunc) error {
 type Handler func(data interface{}) error
 
 //the real shit
-type Tick struct {
+type tick struct {
 	data     interface{}
 	C        chan interface{}
 	handler  Handler
@@ -62,15 +62,15 @@ type Tick struct {
 	duration uint64
 }
 
-func (t *Tick) Reset(data interface{}) error {
+func (t *tick) Reset(data interface{}) error {
 	return t.s.update(t, data)
 }
 
-func (t *Tick) Cancel() error {
+func (t *tick) Cancel() error {
 	return t.s.delete(t)
 }
 
-func (t *Tick) Delay(d uint64) error {
+func (t *tick) Delay(d uint64) error {
 	_, err := t.s.w.tw.timeBased(d, t)
 	return err
 }
