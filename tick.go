@@ -74,3 +74,7 @@ func (t *tick) Delay(d uint64) error {
 	_, err := t.s.w.tw.timeBased(d, t)
 	return err
 }
+
+func (t *tick) Tunnel() <-chan interface{} {
+	return t.C
+}

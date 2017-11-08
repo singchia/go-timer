@@ -52,6 +52,9 @@ func (t *timingwheel) Time(d uint64, data interface{}, C chan interface{}, handl
 	if C == nil && handler == nil {
 		C = make(chan interface{}, 1)
 	}
+	if t.wheels == nil {
+		return nil, errors.New("timer not started")
+	}
 	ipw := t.indexesPerWheel(d)
 	tick := &tick{data: data, C: C, handler: handler, ipw: ipw, duration: d}
 	t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)

@@ -21,18 +21,30 @@ type Timer interface {
 	//Or you can set func handler, after d ticks, data would be handled
 	//by handler in go-timer. If neither one be set, go-timer will generate a channel,
 	//it's attatched with return value Tick, get it by Tick.Tunnel().
+	//Time must be called after Timer.Start.
 	Time(d uint64, data interface{}, C chan interface{}, handler Handler) (Tick, error)
 
+	//Start to start timer.
 	Start()
+
+	//Stop to stop timer,
+	//all ticks set would be discarded.
 	Stop()
+
+	//Pause the timer,
+	//all ticks won't continue after Timer.Movenon().
 	Pause()
+
+	//Continue the paused timer.
 	Moveon()
 }
 
+//Tick that set in Timer can be required from Timer.Time()
 type Tick interface {
 	Reset(data interface{}) error
 	Cancel() error
 	Delay(d uint64) error
+	Tunnel() <-chan interface{}
 }
 
 func NewTimer() Timer {
