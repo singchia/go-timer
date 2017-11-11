@@ -25,7 +25,7 @@ type timingwheel struct {
 }
 
 func newTimingwheel() *timingwheel {
-	return &timingwheel{interval: DefaultTickInterval, sch: scheduler.NewScheduler()}
+	return &timingwheel{interval: DefaultTickInterval, sch: scheduler.NewScheduler(), signal: make(chan struct{})}
 }
 
 func (t *timingwheel) SetMaxTicks(max uint64) {
