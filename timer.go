@@ -41,12 +41,22 @@ type Timer interface {
 
 //Tick that set in Timer can be required from Timer.Time()
 type Tick interface {
+	//To reset the data set at Timer.Time()
 	Reset(data interface{}) error
+
+	//To cancel the tick
 	Cancel() error
+
+	//Delay the tick if not timeout
 	Delay(d uint64) error
+
+	//To get the channel called at Timer.Time(),
+	//you will get the same channel if set, if not and handler is nil,
+	//then a new created channel will be returned.
 	Tunnel() <-chan interface{}
 }
 
+//Entry
 func NewTimer() Timer {
 	return newTimingwheel()
 }

@@ -18,9 +18,9 @@ type wheel struct {
 	wheelMutex sync.RWMutex
 }
 
-func newWheel(numSlots uint, position uint) *wheel {
+func newWheel(t *timingwheel, numSlots uint, position uint) *wheel {
 	slots := make([]*slot, 0, numSlots)
-	wil := &wheel{cur: 0, numSlots: numSlots, position: position}
+	wil := &wheel{tw: t, cur: 0, numSlots: numSlots, position: position}
 	for i := 0; i < int(numSlots); i++ {
 		slot := newSlot(wil)
 		slots = append(slots, slot)

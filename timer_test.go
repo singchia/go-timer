@@ -55,3 +55,27 @@ func Test_Moveon(t *testing.T) {
 	t.Log(elapse)
 	return
 }
+
+func Test_Reset(t *testing.T) {
+	tw := NewTimer()
+	tw.Start()
+	tick, _ := tw.Time(2, 1, nil, nil)
+	tick.Reset(2)
+	o := <-tick.Tunnel()
+	if o.(int) != 2 {
+		t.Error(o)
+		return
+	}
+	return
+}
+
+func Test_Delay(t *testing.T) {
+	tw := NewTimer()
+	tw.Start()
+	tick, _ := tw.Time(1, time.Now(), nil, nil)
+	tick.Delay(2)
+	o := <-tick.Tunnel()
+	elapse := time.Since(o.(time.Time))
+	t.Log(elapse)
+	return
+}
