@@ -79,3 +79,22 @@ func Test_Delay(t *testing.T) {
 	t.Log(elapse)
 	return
 }
+
+func Test_Cancel(t *testing.T) {
+	tw := NewTimer()
+	tw.Start()
+	tick, _ := tw.Time(1, time.Now(), nil, nil)
+	err := tick.Cancel()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	select {
+	case <-tick.Tunnel():
+		t.Error("not paused")
+	case <-time.NewTimer(time.Second * 5).C:
+		t.Log("canceled and timeout")
+	}
+	return
+
+}

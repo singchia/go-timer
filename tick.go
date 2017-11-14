@@ -71,6 +71,7 @@ func (t *tick) Cancel() error {
 }
 
 func (t *tick) Delay(d uint64) error {
+	t.s.delete(t)
 	_, err := t.s.w.tw.timeBased(d, t)
 	return err
 }
