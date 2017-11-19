@@ -8,3 +8,11 @@ A implementation of hierarchical timing wheels, since build-in timer in golang h
 But in many senarios, we need more from build-in timer, that's the reason **go-timer** be needed. And **go-timer** supports:
 
 ## How-to-use
+
+## Installation
+
+## API
+
+## Bench
+
+## Details
