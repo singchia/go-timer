@@ -33,6 +33,9 @@ func (t *timingwheel) SetMaxTicks(max uint64) {
 	nums := calcuQuotients(max)
 	t.wheels = make([]*wheel, 0, len(nums))
 	for position, num := range nums {
+		if position == len(nums)-1 {
+			num = num + 1
+		}
 		t.wheels = append(t.wheels, newWheel(t, num, uint(position)))
 	}
 	return
