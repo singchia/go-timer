@@ -1,5 +1,5 @@
 # go-timer
-A implementation of hierarchical timing wheels, since build-in timer in golang has serveral limitations:
+An implementation of hierarchical timing wheels, since build-in timer in golang has serveral limitations:
 
 * one timer only notify once or one specific duration.
 * build-in timer can't keep any states.
@@ -15,7 +15,7 @@ In many senarios, using buind-in timer with goroutines seems very common, but go
 * can be paused at runtime.
 
 ## How-to-use
-**go-timer** supplies several easy-understand and easy-integrate interfaces, Let's see a easy sample.
+**go-timer** supplies several easy-understand and easy-integrate interfaces, Let's see an easy sample.
 
 ```golang
 package main
