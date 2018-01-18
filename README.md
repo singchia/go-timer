@@ -118,6 +118,6 @@ Tunnel() <-chan interface{}
 see [here](bench/main.go).   
 
 **conclusion:**   
-if (amount of goroutines) > 30w, **go-timer** got less errors, else **build-in timer** is better.   
-if you don't want too much goroutines and  less precise can be acceptable, I recommend **go-timer**.
+if (amount of goroutines) > 30w, **go-timer** got less errors(时间误差), else **build-in timer** is better.   
+if you don't want too much goroutines to be generated and less precise is acceptable, I recommend **go-timer**.
 
