@@ -12,7 +12,9 @@ In many senarios, using buind-in timer with goroutines seems very common, but go
 * timer data depositing.
 * timer data modification at runtime.
 * delegate function customizing.
-* can be paused at runtime.
+* can be paused at runtime. 
+
+learn [more](http://www.singchia.com/2017/11/25/An-Introduction-Of-Hierarchical-Timing-Wheels/).  
 
 ## How-to-use
 **go-timer** supplies several easy-understand and easy-integrate interfaces, Let's see an easy sample.
