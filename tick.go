@@ -3,17 +3,17 @@ package timer
 import (
 	"sync"
 
-	"github.com/singchia/go-hammer/doublinker"
+	"github.com/singchia/go-hammer/linker"
 )
 
 type slot struct {
-	dlinker   *doublinker.Doublinker
+	dlinker   *linker.Doublinker
 	w         *wheel
 	slotMutex sync.RWMutex
 }
 
 func newSlot(w *wheel) *slot {
-	return &slot{w: w, dlinker: doublinker.NewDoublinker()}
+	return &slot{w: w, dlinker: linker.NewDoublinker()}
 }
 
 func (s *slot) add(tick *tick) *tick {
@@ -37,15 +37,15 @@ func (s *slot) update(tick *tick, data interface{}) error {
 	return nil
 }
 
-func (s *slot) remove() *doublinker.Doublinker {
+func (s *slot) remove() *linker.Doublinker {
 	s.slotMutex.Lock()
 	defer s.slotMutex.Unlock()
 	temp := s.dlinker
-	s.dlinker = doublinker.NewDoublinker()
+	s.dlinker = linker.NewDoublinker()
 	return temp
 }
 
-func (s *slot) foreach(handler doublinker.ForeachFunc) error {
+func (s *slot) foreach(handler linker.ForeachFunc) error {
 	return s.dlinker.Foreach(handler)
 }
 
@@ -56,7 +56,7 @@ type tick struct {
 	data     interface{}
 	C        chan interface{}
 	handler  Handler
-	id       doublinker.DoubID
+	id       linker.DoubID
 	s        *slot
 	ipw      []uint
 	duration uint64

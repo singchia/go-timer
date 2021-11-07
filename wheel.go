@@ -3,7 +3,7 @@ package timer
 import (
 	"sync"
 
-	"github.com/singchia/go-hammer/doublinker"
+	"github.com/singchia/go-hammer/linker"
 )
 
 type wheel struct {
@@ -36,7 +36,7 @@ func (w *wheel) add(n uint, tick *tick) *tick {
 }
 
 //increace n on cur
-func (w *wheel) incN(n uint) *doublinker.Doublinker {
+func (w *wheel) incN(n uint) *linker.Doublinker {
 	w.wheelMutex.Lock()
 	defer w.wheelMutex.Unlock()
 
