@@ -6,4 +6,5 @@ require (
 	github.com/bitly/go-simplejson v0.5.0
 	github.com/singchia/go-hammer v0.0.0-20211008024031-6b891e49cad3
 	github.com/singchia/go-scheduler v0.0.1
+	github.com/tsliwowicz/go-wrk v0.0.0-20210628064207-cc6865c14ec7 // indirect
 )
