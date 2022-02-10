@@ -1,11 +1,71 @@
 package timer
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
 
-func Test_SetInterval(t *testing.T) {
+func BenchmarkGoTimer(b *testing.B) {
+	tw := NewTimer()
+	tw.Start()
+	wait := new(sync.WaitGroup)
+	for i := 0; i < b.N; i++ {
+		wait.Add(1)
+		tw.Time(1, wait, nil, func(data interface{}) error {
+			wait.Done()
+			return nil
+		})
+	}
+	wait.Wait()
+}
+
+func BenchmarkBuildTimer(b *testing.B) {
+	wait := new(sync.WaitGroup)
+	for i := 0; i < b.N; i++ {
+		wait.Add(1)
+		timer := time.NewTimer(time.Second)
+		go func(t *time.Timer) {
+			<-t.C
+			wait.Done()
+		}(timer)
+	}
+	wait.Wait()
+}
+
+func TestCompare(t *testing.T) {
+	count := 10000000
+	s := time.Now()
+	tw := NewTimer()
+	tw.Start()
+	wait := new(sync.WaitGroup)
+	for i := 0; i < count; i++ {
+		wait.Add(1)
+		tw.Time(1, wait, nil, func(data interface{}) error {
+			wait.Done()
+			return nil
+		})
+	}
+	wait.Wait()
+	diff := time.Now().Sub(s).Milliseconds()
+	t.Log("go-timer:", diff)
+
+	s = time.Now()
+	wait = new(sync.WaitGroup)
+	for i := 0; i < count; i++ {
+		wait.Add(1)
+		timer := time.NewTimer(time.Second)
+		go func(t *time.Timer) {
+			<-t.C
+			wait.Done()
+		}(timer)
+	}
+	wait.Wait()
+	diff = time.Now().Sub(s).Milliseconds()
+	t.Log("buildin timer:", diff)
+}
+
+func TestSetInterval(t *testing.T) {
 	tw := NewTimer()
 	tw.SetInterval(time.Second * 5)
 	tw.Start()
@@ -16,7 +76,7 @@ func Test_SetInterval(t *testing.T) {
 	return
 }
 
-func Test_Stop(t *testing.T) {
+func TestStop(t *testing.T) {
 	tw := NewTimer()
 	tw.Start()
 	tw.Stop()
@@ -29,7 +89,7 @@ func Test_Stop(t *testing.T) {
 	return
 }
 
-func Test_Pause(t *testing.T) {
+func TestPause(t *testing.T) {
 	tw := NewTimer()
 	tw.Start()
 	tick, _ := tw.Time(2, time.Now(), nil, nil)
@@ -43,7 +103,7 @@ func Test_Pause(t *testing.T) {
 	return
 }
 
-func Test_Moveon(t *testing.T) {
+func TestMoveon(t *testing.T) {
 	tw := NewTimer()
 	tw.Start()
 	tick, _ := tw.Time(2, time.Now(), nil, nil)
@@ -56,7 +116,7 @@ func Test_Moveon(t *testing.T) {
 	return
 }
 
-func Test_Reset(t *testing.T) {
+func TestReset(t *testing.T) {
 	tw := NewTimer()
 	tw.Start()
 	tick, _ := tw.Time(2, 1, nil, nil)
@@ -69,7 +129,7 @@ func Test_Reset(t *testing.T) {
 	return
 }
 
-func Test_Delay(t *testing.T) {
+func TestDelay(t *testing.T) {
 	tw := NewTimer()
 	tw.Start()
 	tick, _ := tw.Time(1, time.Now(), nil, nil)
@@ -80,7 +140,7 @@ func Test_Delay(t *testing.T) {
 	return
 }
 
-func Test_Cancel(t *testing.T) {
+func TestCancel(t *testing.T) {
 	tw := NewTimer()
 	tw.Start()
 	tick, _ := tw.Time(1, time.Now(), nil, nil)
