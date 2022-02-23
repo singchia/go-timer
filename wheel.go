@@ -3,7 +3,7 @@ package timer
 import (
 	"sync"
 
-	"github.com/singchia/go-hammer/linker"
+	"github.com/singchia/go-timer/pkg/linker"
 )
 
 type wheel struct {
