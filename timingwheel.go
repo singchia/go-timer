@@ -1,3 +1,11 @@
+/*
+ * Copyright (c) 2021 Austin Zhai <singchia@163.com>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License, or (at your option) any later version.
+ */
 package timer
 
 import (
@@ -10,11 +18,14 @@ import (
 )
 
 const (
-	//10 milliseconds is min interval gotimer can accept
-	MinTickInterval     time.Duration = 10 * time.Millisecond
+	//A milliseconds is min interval gotimer can accept
+	MinTickInterval     time.Duration = time.Millisecond
 	DefaultTickInterval time.Duration = time.Second
 	DefaultMaxTicks     uint64        = 1024 * 1024 * 1024
 )
+
+type operation struct {
+}
 
 type timingwheel struct {
 	wheels   []*wheel
@@ -25,7 +36,11 @@ type timingwheel struct {
 }
 
 func newTimingwheel() *timingwheel {
-	return &timingwheel{interval: DefaultTickInterval, sch: scheduler.NewScheduler(), signal: make(chan struct{})}
+	return &timingwheel{
+		interval: DefaultTickInterval,
+		sch:      scheduler.NewScheduler(),
+		signal:   make(chan struct{}),
+	}
 }
 
 func (t *timingwheel) SetMaxTicks(max uint64) {
@@ -41,14 +56,7 @@ func (t *timingwheel) SetMaxTicks(max uint64) {
 	return
 }
 
-func (t *timingwheel) SetInterval(interval time.Duration) {
-	t.interval = interval
-}
-
-func (t *timingwheel) Time(d uint64, data interface{}, C chan interface{}, handler Handler) (Tick, error) {
-	if d == 0 || d > t.max-1 {
-		return nil, errors.New("invalid duration")
-	}
+func (t *timingwheel) Time(d time.Duration, opts ...Option) Tick {
 	if data == nil {
 		return nil, errors.New("invalid data")
 	}
