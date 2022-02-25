@@ -12,21 +12,29 @@ import "time"
 
 type Handler func(data interface{}) error
 
-type Option func(*tickOption)
+type TimerOption func(*timerOption)
 
-func WithData(data interface{}) Option {
+func WithTimeInterval(interval time.Duration) {
+	return func(tw *timingwheel) {
+		tw.interval = interval
+	}
+}
+
+type TickOption func(*tickOption)
+
+func WithData(data interface{}) TickOption {
 	return func(to *tickOption) {
 		to.data = data
 	}
 }
 
-func WithChan(C chan interface{}) Option {
+func WithChan(C chan interface{}) TickOption {
 	return func(to *tickOption) {
 		to.C = C
 	}
 }
 
-func WithHandler(handler Handler) Option {
+func WithHandler(handler Handler) TickOption {
 	return func(to *tickOption) {
 		to.handler = handler
 	}
@@ -39,7 +47,7 @@ type Timer interface {
 	//by handler in go-timer. If neither one be set, go-timer will generate a channel,
 	//it's attatched with return value Tick, get it by Tick.Tunnel().
 	//Time must be called after Timer.Start.
-	Time(d time.Duration, opts ...Option) Tick
+	Time(d time.Duration, opts ...TickOption) Tick
 
 	//Start to start timer.
 	Start()

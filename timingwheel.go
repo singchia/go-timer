@@ -9,7 +9,6 @@
 package timer
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -18,56 +17,60 @@ import (
 )
 
 const (
-	//A milliseconds is min interval gotimer can accept
-	MinTickInterval     time.Duration = time.Millisecond
-	DefaultTickInterval time.Duration = time.Second
-	DefaultMaxTicks     uint64        = 1024 * 1024 * 1024
+	defaultTickInterval time.Duration = time.Millisecond
+	defaultTicks        uint64        = 1024 * 1024 * 1024 * 1024
+	defaultSlots        uint64        = 256
 )
 
-type operation struct {
+type timerOption struct {
+	interval time.Duration
 }
 
 type timingwheel struct {
-	wheels   []*wheel
-	interval time.Duration
-	signal   chan struct{}
-	max      uint64
-	sch      *scheduler.Scheduler
+	*timerOption
+	wheels []*wheel
+	max    uint64
+	sch    *scheduler.Scheduler
+	quit   chan struct{}
 }
 
-func newTimingwheel() *timingwheel {
-	return &timingwheel{
-		interval: DefaultTickInterval,
-		sch:      scheduler.NewScheduler(),
-		signal:   make(chan struct{}),
-	}
-}
+func newTimingwheel(opts ...TimerOption) *timingwheel {
+	max, length := calcuWheels(defaultTicks)
 
-func (t *timingwheel) SetMaxTicks(max uint64) {
-	t.max = max
-	nums := calcuQuotients(max)
-	t.wheels = make([]*wheel, 0, len(nums))
-	for position, num := range nums {
-		if position == len(nums)-1 {
-			num = num + 1
-		}
-		t.wheels = append(t.wheels, newWheel(t, num, uint(position)))
+	tw := &timingwheel{
+		wheels: make([]*wheel, length),
+		max:    max,
+		sch:    scheduler.NewScheduler(),
+		quit:   make(chan struct{}),
+		timerOption: &timerOption{
+			interval: defaultTickInterval,
+		},
 	}
-	return
+	for _, opt := range opts {
+		opt(tw.timerOption)
+	}
+	for i := 0; i < length; i++ {
+		tw.wheels = append(tw.wheels, newWheel(tw, defaultSlots, i))
+	}
+	return tw
 }
 
 func (t *timingwheel) Time(d time.Duration, opts ...Option) Tick {
-	if data == nil {
-		return nil, errors.New("invalid data")
+	tick := &tick{}
+	for _, opt := range opts {
+		opt(tick)
 	}
-	if C == nil && handler == nil {
-		C = make(chan interface{}, 1)
-	}
-	if t.wheels == nil {
-		return nil, errors.New("timer not started")
+	if tick.C == nil && tick.handler == nil {
+		tick.C = make(chan interface{}, 1)
 	}
 	ipw := t.indexesPerWheel(d)
-	tick := &tick{data: data, C: C, handler: handler, ipw: ipw, duration: d}
+
+	tick := &tick{
+		data:     data,
+		C:        C,
+		handler:  handler,
+		ipw:      ipw,
+		duration: d}
 	t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
 	return tick, nil
 }
@@ -89,7 +92,7 @@ func (t *timingwheel) Start() {
 }
 
 func (t *timingwheel) Pause() {
-	t.signal <- struct{}{}
+	t.quit <- struct{}{}
 	return
 }
 
@@ -176,23 +179,18 @@ func (t *timingwheel) indexesPerWheelBased(d uint64, base []uint) []uint {
 	return ipw
 }
 
-func calcuQuotients(num uint64) []uint {
-	var quos []uint
+func calcuWheels(num uint64) (uint64, int) {
+	count := defaultSlotsPerWheel
+	length := 1
 	for {
-		quo := num / 16
-		rem := num % 16
-		if quo != 0 {
-			quos = append(quos, 16)
-		} else {
-			quos = append(quos, uint(rem))
-			break
+		if count < num {
+			count *= defaultSlotsPerWheel
+			length += 1
+			continue
 		}
-		if rem != 0 {
-			quo = quo + 1
-		}
-		num = quo
+		break
 	}
-	return quos
+	return count, length
 }
 
 //for debug

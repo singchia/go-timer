@@ -20,6 +20,7 @@ type tickOption struct {
 
 //the real shit
 type tick struct {
+	*tickOption
 	data     interface{}
 	C        chan interface{}
 	handler  Handler
