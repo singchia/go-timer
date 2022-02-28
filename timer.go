@@ -14,9 +14,9 @@ type Handler func(data interface{}) error
 
 type TimerOption func(*timerOption)
 
-func WithTimeInterval(interval time.Duration) {
-	return func(tw *timingwheel) {
-		tw.interval = interval
+func WithTimeInterval(interval time.Duration) TimerOption {
+	return func(to *timerOption) {
+		to.interval = interval
 	}
 }
 
@@ -73,7 +73,7 @@ type Tick interface {
 	Cancel()
 
 	//Delay the tick if not timeout
-	Delay(d uint64)
+	Delay(d time.Duration)
 
 	//To get the channel called at Timer.Time(),
 	//you will get the same channel if set, if not and handler is nil,

@@ -30,16 +30,11 @@ func newWheel(t *timingwheel, numSlots uint, position uint) *wheel {
 }
 
 func (w *wheel) add(n uint, tick *tick) *tick {
-	w.wheelMutex.RLock()
-	defer w.wheelMutex.RUnlock()
 	return w.slots[n].add(tick)
 }
 
 //increace n on cur
 func (w *wheel) incN(n uint) *linker.Doublinker {
-	w.wheelMutex.Lock()
-	defer w.wheelMutex.Unlock()
-
 	w.cur += n
 	if w.cur >= w.numSlots {
 		w.cur -= w.numSlots

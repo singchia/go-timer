@@ -25,29 +25,21 @@ func newSlot(w *wheel) *slot {
 }
 
 func (s *slot) add(tick *tick) *tick {
-	s.slotMutex.RLock()
-	defer s.slotMutex.RUnlock()
-
 	doubID := s.dlinker.Add(tick)
 	tick.id = doubID
 	tick.s = s
 	return tick
 }
 
-func (s *slot) delete(tick *tick) error {
-	s.slotMutex.RLock()
-	defer s.slotMutex.RUnlock()
-	return s.dlinker.Delete(tick.id)
+func (s *slot) delete(tick *tick) {
+	s.dlinker.Delete(tick.id)
 }
 
-func (s *slot) update(tick *tick, data interface{}) error {
+func (s *slot) update(tick *tick, data interface{}) {
 	tick.data = data
-	return nil
 }
 
 func (s *slot) remove() *linker.Doublinker {
-	s.slotMutex.Lock()
-	defer s.slotMutex.Unlock()
 	temp := s.dlinker
 	s.dlinker = linker.NewDoublinker()
 	return temp

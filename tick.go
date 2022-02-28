@@ -9,6 +9,8 @@
 package timer
 
 import (
+	"time"
+
 	"github.com/singchia/go-timer/pkg/linker"
 )
 
@@ -21,27 +23,24 @@ type tickOption struct {
 //the real shit
 type tick struct {
 	*tickOption
-	data     interface{}
-	C        chan interface{}
-	handler  Handler
 	id       linker.DoubID
 	s        *slot
 	ipw      []uint
-	duration uint64
+	duration time.Duration
 }
 
-func (t *tick) Reset(data interface{}) error {
-	return t.s.update(t, data)
+func (t *tick) Reset(data interface{}) {
+	t.s.update(t, data)
 }
 
-func (t *tick) Cancel() error {
-	return t.s.delete(t)
-}
-
-func (t *tick) Delay(d uint64) error {
+func (t *tick) Cancel() {
 	t.s.delete(t)
-	_, err := t.s.w.tw.timeBased(d, t)
-	return err
+}
+
+func (t *tick) Delay(d time.Duration) {
+	t.s.delete(t)
+	t.s.w.tw.timeBased(d, t)
+	return
 }
 
 func (t *tick) Tunnel() <-chan interface{} {
