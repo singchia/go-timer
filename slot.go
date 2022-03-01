@@ -9,15 +9,12 @@
 package timer
 
 import (
-	"sync"
-
 	"github.com/singchia/go-timer/pkg/linker"
 )
 
 type slot struct {
-	dlinker   *linker.Doublinker
-	w         *wheel
-	slotMutex sync.RWMutex
+	dlinker *linker.Doublinker
+	w       *wheel
 }
 
 func newSlot(w *wheel) *slot {

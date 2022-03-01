@@ -51,12 +51,11 @@ func buildinTime() (tolerance int64) {
 func goTime() (tolerance int64) {
 	var wait sync.WaitGroup
 	tw := gotime.NewTimer()
-	tw.SetInterval(time.Duration(grain * 1000))
 	tw.Start()
 	for i := 0; i < count; i++ {
 		wait.Add(1)
 		t := time.Now()
-		tw.Time(1, t, nil, func(data interface{}) error {
+		tw.Time(1, gotime.WithData(t), gotime.WithHandler(func(data interface{}) error {
 			defer wait.Done()
 			t = data.(time.Time)
 			thisToler := int64(math.Abs(float64(time.Since(t) - time.Duration(grain*1000))))
@@ -65,7 +64,7 @@ func goTime() (tolerance int64) {
 			}
 			atomic.AddInt64(&tolerance, thisToler)
 			return nil
-		})
+		}))
 	}
 	wait.Wait()
 	return tolerance / int64(count)
