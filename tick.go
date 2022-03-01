@@ -23,10 +23,12 @@ type tickOption struct {
 //the real shit
 type tick struct {
 	*tickOption
-	id       linker.DoubID
-	s        *slot
-	ipw      []uint
-	duration time.Duration
+	id         linker.DoubID
+	s          *slot
+	ipw        []uint
+	duration   time.Duration
+	delay      time.Duration
+	insertTime time.Time
 }
 
 func (t *tick) Reset(data interface{}) {
@@ -34,15 +36,29 @@ func (t *tick) Reset(data interface{}) {
 }
 
 func (t *tick) Cancel() {
-	t.s.delete(t)
+	t.s.w.tw.operations <- &operation{
+		tick:     t,
+		opertype: operdel,
+	}
 }
 
 func (t *tick) Delay(d time.Duration) {
-	t.s.delete(t)
-	t.s.w.tw.timeBased(d, t)
+	t.delay = d
+	t.s.w.tw.operations <- &operation{
+		tick:     t,
+		opertype: operdelay,
+	}
 	return
 }
 
-func (t *tick) Tunnel() <-chan interface{} {
+func (t *tick) Channel() <-chan interface{} {
 	return t.C
+}
+
+func (t *tick) InsertTime() time.Time {
+	return t.insertTime
+}
+
+func (t *tick) Duration() time.Duration {
+	return t.duration
 }

@@ -50,10 +50,11 @@ func newTimingwheel(opts ...TimerOption) *timingwheel {
 	max, length := calcuWheels(defaultTicks)
 
 	tw := &timingwheel{
-		wheels: make([]*wheel, length),
-		max:    max,
-		sch:    scheduler.NewScheduler(),
-		quit:   make(chan struct{}),
+		wheels:     make([]*wheel, 0, length),
+		max:        max,
+		sch:        scheduler.NewScheduler(),
+		quit:       make(chan struct{}),
+		operations: make(chan *operation, 1024),
 		timerOption: &timerOption{
 			interval: defaultTickInterval,
 		},
@@ -68,25 +69,19 @@ func newTimingwheel(opts ...TimerOption) *timingwheel {
 }
 
 func (t *timingwheel) Time(d time.Duration, opts ...TickOption) Tick {
-	tick := &tick{duration: d}
+	tick := &tick{
+		duration:   d,
+		insertTime: time.Now(),
+		tickOption: &tickOption{},
+	}
 	for _, opt := range opts {
 		opt(tick.tickOption)
 	}
 	if tick.C == nil && tick.handler == nil {
 		tick.C = make(chan interface{}, 1)
 	}
-	//ipw := t.indexesPerWheel(d)
-	//t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
 	t.operations <- &operation{tick, operadd}
 	return tick
-}
-
-func (t *timingwheel) timeBased(d time.Duration, tick *tick) (*tick, error) {
-	ipw := t.indexesPerWheelBased(d, tick.ipw)
-	tick.ipw = ipw
-	tick.duration += d
-	t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
-	return tick, nil
 }
 
 func (t *timingwheel) Start() {
@@ -116,7 +111,9 @@ func (t *timingwheel) drive() {
 		case <-driver.C:
 			for _, wheel := range t.wheels {
 				linker := wheel.incN(1)
-				linker.Foreach(t.iterate)
+				if linker.Length() > 0 {
+					linker.Foreach(t.iterate)
+				}
 				if wheel.cur != 0 {
 					break
 				}
@@ -125,6 +122,17 @@ func (t *timingwheel) drive() {
 			switch operation.opertype {
 			case operadd:
 				ipw := t.indexesPerWheel(operation.tick.duration)
+				operation.tick.ipw = ipw
+				t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
+
+			case operdel:
+				operation.tick.s.delete(operation.tick)
+
+			case operdelay:
+				operation.tick.s.delete(operation.tick)
+				ipw := t.indexesPerWheelBased(operation.tick.delay, operation.tick.ipw)
+				operation.tick.ipw = ipw
+				operation.tick.duration += operation.tick.delay
 				t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
 			}
 		case <-t.quit:
@@ -160,7 +168,7 @@ func (t *timingwheel) handle(data interface{}) {
 func (t *timingwheel) indexesPerWheel(d time.Duration) []uint {
 	var ipw []uint
 	var reminder uint64
-	var quotient = uint64(d)
+	var quotient = uint64((d + t.interval - 1) / t.interval)
 	for i, wheel := range t.wheels {
 		if quotient == 0 {
 			break
@@ -176,7 +184,7 @@ func (t *timingwheel) indexesPerWheel(d time.Duration) []uint {
 func (t *timingwheel) indexesPerWheelBased(d time.Duration, base []uint) []uint {
 	var ipw []uint
 	var reminder uint64
-	var quotient = uint64(d)
+	var quotient = uint64((d + t.interval - 1) / t.interval)
 	for i, wheel := range t.wheels {
 		if quotient == 0 {
 			break

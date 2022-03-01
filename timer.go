@@ -45,7 +45,7 @@ type Timer interface {
 	//you can set channel C, and after d ticks, data would be consumed from C.
 	//Or you can set func handler, after d ticks, data would be handled
 	//by handler in go-timer. If neither one be set, go-timer will generate a channel,
-	//it's attatched with return value Tick, get it by Tick.Tunnel().
+	//it's attatched with return value Tick, get it by Tick.Channel().
 	//Time must be called after Timer.Start.
 	Time(d time.Duration, opts ...TickOption) Tick
 
@@ -78,10 +78,16 @@ type Tick interface {
 	//To get the channel called at Timer.Time(),
 	//you will get the same channel if set, if not and handler is nil,
 	//then a new created channel will be returned.
-	Tunnel() <-chan interface{}
+	Channel() <-chan interface{}
+
+	// Insert time
+	InsertTime() time.Time
+
+	// Duration
+	Duration() time.Duration
 }
 
 //Entry
-func NewTimer() Timer {
-	return newTimingwheel()
+func NewTimer(opts ...TimerOption) Timer {
+	return newTimingwheel(opts...)
 }

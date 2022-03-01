@@ -23,12 +23,11 @@ func goTime() {
 	tw.Start()
 	wait := new(sync.WaitGroup)
 	for i := 0; i < count; i++ {
-		time.Sleep(time.Microsecond)
 		wait.Add(1)
-		tw.Time(1, wait, nil, func(data interface{}) error {
+		tw.Time(time.Second, gotime.WithData(wait), gotime.WithHandler(func(data interface{}) error {
 			wait.Done()
 			return nil
-		})
+		}))
 	}
 	wait.Wait()
 	fmt.Println("the end")

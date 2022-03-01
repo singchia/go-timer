@@ -1,8 +1,6 @@
 package timer
 
 import (
-	"sync"
-
 	"github.com/singchia/go-timer/pkg/linker"
 )
 
@@ -14,8 +12,6 @@ type wheel struct {
 	numSlots uint
 	//position in whole timer
 	position uint
-	//mutex for cur
-	wheelMutex sync.RWMutex
 }
 
 func newWheel(t *timingwheel, numSlots uint, position uint) *wheel {
