@@ -93,7 +93,6 @@ func buildinReflectTime() (tolerance int64) {
 				cases = append(cases[:i], cases[i+1:]...)
 				mu.Unlock()
 			} else {
-				fmt.Printf("%v\n", value)
 				wait.Done()
 			}
 		}

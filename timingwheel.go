@@ -9,15 +9,15 @@
 package timer
 
 import (
+	"sync/atomic"
 	"time"
-
-	scheduler "github.com/singchia/go-scheduler"
 )
 
 const (
 	defaultTickInterval time.Duration = time.Millisecond
+	defaultPoolSize     int           = 10
 	defaultTicks        uint64        = 1024 * 1024 * 1024 * 1024
-	defaultSlots        uint          = 256
+	defaultSlots        uint          = 2
 )
 
 type opertype int
@@ -35,15 +35,17 @@ type operation struct {
 
 type timerOption struct {
 	interval time.Duration
+	poolSize int
 }
 
 type timingwheel struct {
 	*timerOption
 	wheels     []*wheel
 	max        uint64
-	sch        *scheduler.Scheduler
 	quit       chan struct{}
 	operations chan *operation
+	doneTickCh chan interface{}
+	ticking    int32 // atomic bool
 }
 
 func newTimingwheel(opts ...TimerOption) *timingwheel {
@@ -52,12 +54,14 @@ func newTimingwheel(opts ...TimerOption) *timingwheel {
 	tw := &timingwheel{
 		wheels:     make([]*wheel, 0, length),
 		max:        max,
-		sch:        scheduler.NewScheduler(),
 		quit:       make(chan struct{}),
 		operations: make(chan *operation, 1024),
 		timerOption: &timerOption{
 			interval: defaultTickInterval,
+			poolSize: defaultPoolSize,
 		},
+		doneTickCh: make(chan interface{}, 1024),
+		ticking:    0,
 	}
 	for _, opt := range opts {
 		opt(tw.timerOption)
@@ -85,23 +89,29 @@ func (t *timingwheel) Time(d time.Duration, opts ...TickOption) Tick {
 }
 
 func (t *timingwheel) Start() {
+	atomic.StoreInt32(&t.ticking, 1)
 	go t.drive()
-	return
+	go t.handle()
 }
 
 func (t *timingwheel) Pause() {
-	t.quit <- struct{}{}
-	return
+	paused := atomic.CompareAndSwapInt32(&t.ticking, 1, 0)
+	if paused {
+		close(t.quit)
+	}
 }
 
 func (t *timingwheel) Moveon() {
-	go t.drive()
+	moveon := atomic.CompareAndSwapInt32(&t.ticking, 0, 1)
+	if moveon {
+		t.quit = make(chan struct{})
+		go t.drive()
+	}
 }
 
 func (t *timingwheel) Stop() {
-	t.quit <- struct{}{}
+	close(t.quit)
 	t.wheels = nil
-	t.sch.Close()
 }
 
 func (t *timingwheel) drive() {
@@ -118,6 +128,7 @@ func (t *timingwheel) drive() {
 					break
 				}
 			}
+
 		case operation := <-t.operations:
 			switch operation.opertype {
 			case operadd:
@@ -135,11 +146,11 @@ func (t *timingwheel) drive() {
 				operation.tick.duration += operation.tick.delay
 				t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
 			}
+
 		case <-t.quit:
 			return
 		}
 	}
-	return
 }
 
 func (t *timingwheel) iterate(data interface{}) error {
@@ -152,16 +163,27 @@ func (t *timingwheel) iterate(data interface{}) error {
 			return nil
 		}
 	}
-	t.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: t.handle})
+	t.doneTickCh <- tick
 	return nil
 }
 
-func (t *timingwheel) handle(data interface{}) {
-	tick, _ := data.(*tick)
-	if tick.C == nil {
-		tick.handler(tick.data)
-	} else {
-		tick.C <- tick.data
+func (t *timingwheel) handle() {
+	for i := 0; i < t.poolSize; i++ {
+		go func() {
+			for {
+				select {
+				case data := <-t.doneTickCh:
+					tick, _ := data.(*tick)
+					if tick.C == nil {
+						tick.handler(tick.data)
+					} else {
+						tick.C <- tick.data
+					}
+				case <-t.quit:
+					return
+				}
+			}
+		}()
 	}
 }
 

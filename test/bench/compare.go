@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,39 +41,41 @@ func main() {
 	}
 }
 
-func buildinTime(count int) (tolerance int64) {
-	var wait sync.WaitGroup
-	for i := 0; i < count; i++ {
-		wait.Add(1)
-		t := time.Now()
-		timer := time.NewTimer(time.Duration(grain))
-		go func(t time.Time, timer *time.Timer) {
-			defer wait.Done()
-			<-timer.C
-			thisToler := int64(math.Abs(float64(time.Since(t) - time.Duration(grain))))
-			atomic.AddInt64(&tolerance, thisToler)
-		}(t, timer)
-	}
-	wait.Wait()
-	return tolerance / int64(count)
-}
-
 func goTime(count int) (tolerance int64) {
-	var wait sync.WaitGroup
-	tw := gotime.NewTimer(gotime.WithTimeInterval(time.Microsecond))
+	tw := gotime.NewTimer(gotime.WithTimeInterval(100 * time.Millisecond))
 	tw.Start()
+	var wait sync.WaitGroup
 	for i := 0; i < count; i++ {
 		wait.Add(1)
 		t := time.Now()
-		tw.Time(time.Duration(grain), gotime.WithData(t), gotime.WithHandler(func(data interface{}) error {
+		d := time.Duration((rand.Int63n(int64(count)) + 1) * grain)
+		tw.Time(d, gotime.WithData(t), gotime.WithHandler(func(data interface{}) error {
 			defer wait.Done()
 			t = data.(time.Time)
-			thisToler := int64(math.Abs(float64(time.Since(t) - time.Duration(grain))))
+			thisToler := int64(math.Abs(float64(time.Since(t) - d)))
 			atomic.AddInt64(&tolerance, thisToler)
 			return nil
 		}))
 	}
 	wait.Wait()
 	tw.Stop()
+	return tolerance / int64(count)
+}
+
+func buildinTime(count int) (tolerance int64) {
+	var wait sync.WaitGroup
+	for i := 0; i < count; i++ {
+		wait.Add(1)
+		t := time.Now()
+		d := time.Duration((rand.Int63n(int64(count) + 1)) * grain)
+		timer := time.NewTimer(d)
+		go func(t time.Time, timer *time.Timer) {
+			defer wait.Done()
+			<-timer.C
+			thisToler := int64(math.Abs(float64(time.Since(t) - d)))
+			atomic.AddInt64(&tolerance, thisToler)
+		}(t, timer)
+	}
+	wait.Wait()
 	return tolerance / int64(count)
 }

@@ -20,6 +20,11 @@ func WithTimeInterval(interval time.Duration) TimerOption {
 	}
 }
 
+func WithHandlerPool(size int) TimerOption {
+	return func(to *timerOption) {
+	}
+}
+
 type TickOption func(*tickOption)
 
 func WithData(data interface{}) TickOption {
