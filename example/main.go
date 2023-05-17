@@ -12,8 +12,9 @@ func main() {
 	t.Start()
 	ch := make(chan interface{})
 	old := time.Now()
-	t.Time(5, 1, ch, nil)
-	<-ch
+
+	tick := t.Time(5, timer.WithData(1), timer.WithChan(ch))
+	<-tick.Channel()
 	elapse := time.Now().Sub(old)
 	fmt.Printf("time diff: %d", elapse)
 }

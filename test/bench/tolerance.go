@@ -12,35 +12,45 @@ import (
 	gotime "github.com/singchia/go-timer"
 )
 
-var count int
+var points int
 var grain int64
-var iterateTolerance bool
+var ratio int
+var start int
 
 func main() {
-	flag.IntVar(&count, "c", 1000000, "count of tick")
-	flag.Int64Var(&grain, "g", 1000, "grain of tick in Microsecond")
-	flag.BoolVar(&iterateTolerance, "t", false, "print iterate tolerance")
+	flag.IntVar(&start, "s", 1, "start")
+	flag.IntVar(&points, "p", 10, "points")
+	flag.IntVar(&ratio, "r", 5, "ratio of tick") // 系数
+	flag.Int64Var(&grain, "g", 1000, "grain of tick")
 	flag.Parse()
 
-	tolerance := buildinTime()
-	fmt.Println(time.Duration(tolerance))
-	tolerance = goTime()
-	fmt.Println(time.Duration(tolerance))
+	index := 0
+	for index < points {
+		count := start * int(math.Pow(float64(ratio), float64(index)))
+		tolerance := goTime(count)
+		fmt.Println(count, tolerance)
+		index++
+	}
+
+	index = 0
+	for index < points {
+		count := start * int(math.Pow(float64(ratio), float64(index)))
+		tolerance := buildinTime(count)
+		fmt.Println(count, tolerance)
+		index++
+	}
 }
 
-func buildinTime() (tolerance int64) {
+func buildinTime(count int) (tolerance int64) {
 	var wait sync.WaitGroup
 	for i := 0; i < count; i++ {
 		wait.Add(1)
 		t := time.Now()
-		timer := time.NewTimer(time.Duration(grain * 1000))
+		timer := time.NewTimer(time.Duration(grain))
 		go func(t time.Time, timer *time.Timer) {
 			defer wait.Done()
 			<-timer.C
-			thisToler := int64(math.Abs(float64(time.Since(t) - time.Duration(grain*1000))))
-			if iterateTolerance {
-				fmt.Printf("buildin time %d toler: %d\n", i, thisToler)
-			}
+			thisToler := int64(math.Abs(float64(time.Since(t) - time.Duration(grain))))
 			atomic.AddInt64(&tolerance, thisToler)
 		}(t, timer)
 	}
@@ -48,30 +58,27 @@ func buildinTime() (tolerance int64) {
 	return tolerance / int64(count)
 }
 
-func goTime() (tolerance int64) {
+func goTime(count int) (tolerance int64) {
 	var wait sync.WaitGroup
-	tw := gotime.NewTimer()
+	tw := gotime.NewTimer(gotime.WithTimeInterval(time.Microsecond))
 	tw.Start()
 	for i := 0; i < count; i++ {
 		wait.Add(1)
 		t := time.Now()
-		tw.Time(1, gotime.WithData(t), gotime.WithHandler(func(data interface{}) error {
+		tw.Time(time.Duration(grain), gotime.WithData(t), gotime.WithHandler(func(data interface{}) error {
 			defer wait.Done()
 			t = data.(time.Time)
-			thisToler := int64(math.Abs(float64(time.Since(t) - time.Duration(grain*1000))))
-			if iterateTolerance {
-				fmt.Printf("buildin time %d toler: %d\n", i, thisToler)
-			}
+			thisToler := int64(math.Abs(float64(time.Since(t) - time.Duration(grain))))
 			atomic.AddInt64(&tolerance, thisToler)
 			return nil
 		}))
 	}
 	wait.Wait()
+	tw.Stop()
 	return tolerance / int64(count)
 }
 
-// we cannot get tolerance from no-context timer
-func buildinReflectTime() (tolerance int64) {
+func buildinReflectTime(count int) (tolerance int64) {
 	var wait sync.WaitGroup
 	cases := []reflect.SelectCase{}
 	mu := new(sync.RWMutex)

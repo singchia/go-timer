@@ -100,7 +100,6 @@ func (t *timingwheel) Moveon() {
 
 func (t *timingwheel) Stop() {
 	t.quit <- struct{}{}
-	t.wheels = nil
 	t.sch.Close()
 }
 
