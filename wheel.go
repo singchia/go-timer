@@ -1,7 +1,7 @@
 package timer
 
 import (
-	"github.com/singchia/go-timer/pkg/linker"
+	"github.com/singchia/go-timer/v2/pkg/linker"
 )
 
 type wheel struct {
@@ -29,7 +29,7 @@ func (w *wheel) add(n uint, tick *tick) *tick {
 	return w.slots[n].add(tick)
 }
 
-//increace n on cur
+// increace n on cur
 func (w *wheel) incN(n uint) *linker.Doublinker {
 	w.cur += n
 	if w.cur >= w.numSlots {

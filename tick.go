@@ -11,16 +11,17 @@ package timer
 import (
 	"time"
 
-	"github.com/singchia/go-timer/pkg/linker"
+	"github.com/singchia/go-timer/v2/pkg/linker"
 )
 
 type tickOption struct {
-	data    interface{}
-	C       chan interface{}
-	handler Handler
+	data interface{}
+	C    chan interface{}
+	// for compatible
+	handler func(interface{}, error)
 }
 
-//the real shit
+// the real shit
 type tick struct {
 	*tickOption
 	id         linker.DoubID
@@ -48,10 +49,9 @@ func (t *tick) Delay(d time.Duration) {
 		tick:     t,
 		opertype: operdelay,
 	}
-	return
 }
 
-func (t *tick) Channel() <-chan interface{} {
+func (t *tick) Chan() <-chan interface{} {
 	return t.C
 }
 

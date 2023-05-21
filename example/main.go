@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	timer "github.com/singchia/go-timer"
+	timer "github.com/singchia/go-timer/v2"
 )
 
 func main() {
@@ -13,8 +13,8 @@ func main() {
 	ch := make(chan interface{})
 	old := time.Now()
 
-	tick := t.Time(5, timer.WithData(1), timer.WithChan(ch))
-	<-tick.Channel()
+	tick := t.Add(5, timer.WithData(1), timer.WithChan(ch))
+	<-tick.Chan()
 	elapse := time.Now().Sub(old)
 	fmt.Printf("time diff: %d", elapse)
 }

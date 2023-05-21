@@ -9,7 +9,7 @@
 package timer
 
 import (
-	"github.com/singchia/go-timer/pkg/linker"
+	"github.com/singchia/go-timer/v2/pkg/linker"
 )
 
 type slot struct {

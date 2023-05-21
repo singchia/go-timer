@@ -9,6 +9,7 @@
 package timer
 
 import (
+	"errors"
 	"time"
 
 	scheduler "github.com/singchia/go-scheduler"
@@ -18,6 +19,12 @@ const (
 	defaultTickInterval time.Duration = time.Millisecond
 	defaultTicks        uint64        = 1024 * 1024 * 1024 * 1024
 	defaultSlots        uint          = 256
+)
+
+var (
+	ErrDurationOutOfRange = errors.New("duration out of range")
+	ErrTimerNotStarted    = errors.New("timer not started")
+	ErrTimerForceClosed   = errors.New("timer force closed")
 )
 
 type opertype int
@@ -44,14 +51,12 @@ type timingwheel struct {
 	sch        *scheduler.Scheduler
 	quit       chan struct{}
 	operations chan *operation
+	status     int32
 }
 
 func newTimingwheel(opts ...TimerOption) *timingwheel {
 	max, length := calcuWheels(defaultTicks)
-
 	tw := &timingwheel{
-		wheels:     make([]*wheel, 0, length),
-		max:        max,
 		sch:        scheduler.NewScheduler(),
 		quit:       make(chan struct{}),
 		operations: make(chan *operation, 1024),
@@ -62,13 +67,20 @@ func newTimingwheel(opts ...TimerOption) *timingwheel {
 	for _, opt := range opts {
 		opt(tw.timerOption)
 	}
-	for i := uint(0); i < uint(length); i++ {
-		tw.wheels = append(tw.wheels, newWheel(tw, defaultSlots, i))
-	}
+	tw.setWheels(max, length)
+	tw.sch.StartSchedule()
 	return tw
 }
 
-func (t *timingwheel) Time(d time.Duration, opts ...TickOption) Tick {
+func (tw *timingwheel) setWheels(max uint64, length int) {
+	tw.wheels = make([]*wheel, 0, length)
+	tw.max = max
+	for i := uint(0); i < uint(length); i++ {
+		tw.wheels = append(tw.wheels, newWheel(tw, defaultSlots, i))
+	}
+}
+
+func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
 	tick := &tick{
 		duration:   d,
 		insertTime: time.Now(),
@@ -80,7 +92,7 @@ func (t *timingwheel) Time(d time.Duration, opts ...TickOption) Tick {
 	if tick.C == nil && tick.handler == nil {
 		tick.C = make(chan interface{}, 1)
 	}
-	t.operations <- &operation{tick, operadd}
+	tw.operations <- &operation{tick, operadd}
 	return tick
 }
 
@@ -98,7 +110,12 @@ func (t *timingwheel) Moveon() {
 	go t.drive()
 }
 
+// This method is deprecated
 func (t *timingwheel) Stop() {
+	t.Close()
+}
+
+func (t *timingwheel) Close() {
 	t.quit <- struct{}{}
 	t.sch.Close()
 }
@@ -135,10 +152,10 @@ func (t *timingwheel) drive() {
 				t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
 			}
 		case <-t.quit:
-			return
+			goto END
 		}
 	}
-	return
+END:
 }
 
 func (t *timingwheel) iterate(data interface{}) error {
@@ -155,10 +172,14 @@ func (t *timingwheel) iterate(data interface{}) error {
 	return nil
 }
 
+func (t *timingwheel) forceClose(data interface{}) error {
+	return nil
+}
+
 func (t *timingwheel) handle(data interface{}) {
 	tick, _ := data.(*tick)
 	if tick.C == nil {
-		tick.handler(tick.data)
+		tick.handler(tick.data, nil)
 	} else {
 		tick.C <- tick.data
 	}
