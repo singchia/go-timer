@@ -1,6 +1,7 @@
 package timer
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -19,14 +20,16 @@ func Test_SetInterval(t *testing.T) {
 func Test_Stop(t *testing.T) {
 	tw := NewTimer()
 	tw.Start()
-	tw.Stop()
-	_, err := tw.Time(2, struct{}{}, nil, nil)
-	if err == nil {
-		t.Error("should be error")
+	_, err := tw.Time(2, struct{}{}, nil, func(data interface{}) error {
+		t.Log(data.(struct{}))
+		return nil
+	})
+	if err != nil {
+		t.Error(err)
 		return
 	}
-	t.Log(err.Error())
-	return
+	tw.Stop()
+	time.Sleep(500 * time.Millisecond)
 }
 
 func Test_Pause(t *testing.T) {
@@ -97,4 +100,25 @@ func Test_Cancel(t *testing.T) {
 	}
 	return
 
+}
+
+func Benchmark_Delay(b *testing.B) {
+	tw := NewTimer()
+	tw.Start()
+	fired := 0
+	for i := 0; i < b.N; i++ {
+		second := uint64(rand.Intn(10) + 1)
+		tick, err := tw.Time(second, time.Now(), nil, func(data interface{}) error {
+			elapse := time.Since(data.(time.Time).Add(time.Duration(second) * time.Second))
+			b.Log(elapse)
+			fired++
+			return nil
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+		tick.Delay(2)
+	}
+	time.Sleep(13 * time.Second)
+	b.Log(b.N, fired)
 }

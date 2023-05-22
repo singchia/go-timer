@@ -3,10 +3,11 @@ package timer
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	simplejson "github.com/bitly/go-simplejson"
-	scheduler "github.com/singchia/go-scheduler"
+	"github.com/singchia/go-timer/pkg/scheduler"
 )
 
 const (
@@ -16,21 +17,53 @@ const (
 	DefaultMaxTicks     uint64        = 1024 * 1024 * 1024
 )
 
+var (
+	ErrInvalidDuration  = errors.New("invalid duration")
+	ErrTimerUnavailable = errors.New("timer unavailable")
+)
+
+const (
+	twStatusInit = iota
+	twStatusStarted
+	twStatusPaused
+	twStatusStoped
+)
+
 type timingwheel struct {
+	mtx      sync.RWMutex
+	twStatus int
+
 	wheels   []*wheel
 	interval time.Duration
-	signal   chan struct{}
 	max      uint64
 	sch      *scheduler.Scheduler
+
+	pause, quit chan struct{}
 }
 
 func newTimingwheel() *timingwheel {
-	tw := &timingwheel{interval: DefaultTickInterval, sch: scheduler.NewScheduler(), signal: make(chan struct{})}
+	tw := &timingwheel{
+		interval: DefaultTickInterval,
+		twStatus: twStatusInit,
+		sch:      scheduler.NewScheduler(),
+		pause:    make(chan struct{}),
+		quit:     make(chan struct{})}
+	tw.sch.SetMaxGoroutines(1000)
 	tw.sch.StartSchedule()
 	return tw
 }
 
 func (t *timingwheel) SetMaxTicks(max uint64) {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	if t.twStatus != twStatusInit {
+		return
+	}
+
+	t.setMaxTicks(max)
+}
+
+func (t *timingwheel) setMaxTicks(max uint64) {
 	t.max = max
 	nums := calcuQuotients(max)
 	t.wheels = make([]*wheel, 0, len(nums))
@@ -40,26 +73,31 @@ func (t *timingwheel) SetMaxTicks(max uint64) {
 		}
 		t.wheels = append(t.wheels, newWheel(t, num, uint(position)))
 	}
-	return
 }
 
 func (t *timingwheel) SetInterval(interval time.Duration) {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
+	if t.twStatus != twStatusInit {
+		return
+	}
 	t.interval = interval
 }
 
 func (t *timingwheel) Time(d uint64, data interface{}, C chan interface{}, handler Handler) (Tick, error) {
 	if d == 0 || d > t.max-1 {
-		return nil, errors.New("invalid duration")
-	}
-	if data == nil {
-		return nil, errors.New("invalid data")
+		return nil, ErrInvalidDuration
 	}
 	if C == nil && handler == nil {
 		C = make(chan interface{}, 1)
 	}
-	if t.wheels == nil {
-		return nil, errors.New("timer not started")
+	t.mtx.RLock()
+	if t.twStatus != twStatusStarted && t.twStatus != twStatusPaused {
+		t.mtx.RUnlock()
+		return nil, ErrTimerUnavailable
 	}
+	t.mtx.RUnlock()
+
 	ipw := t.indexesPerWheel(d)
 	tick := &tick{data: data, C: C, handler: handler, ipw: ipw, duration: d}
 	t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
@@ -69,32 +107,55 @@ func (t *timingwheel) Time(d uint64, data interface{}, C chan interface{}, handl
 func (t *timingwheel) timeBased(d uint64, tick *tick) (*tick, error) {
 	ipw := t.indexesPerWheelBased(d, tick.ipw)
 	tick.ipw = ipw
+
 	tick.duration += d
 	t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
 	return tick, nil
 }
 
 func (t *timingwheel) Start() {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+	if t.twStatus != twStatusInit && t.twStatus != twStatusPaused {
+		return
+	}
+	t.twStatus = twStatusStarted
 	if t.wheels == nil {
-		t.SetMaxTicks(DefaultMaxTicks)
+		t.setMaxTicks(DefaultMaxTicks)
 	}
 	go t.drive()
 	return
 }
 
 func (t *timingwheel) Pause() {
-	t.signal <- struct{}{}
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+	if t.twStatus != twStatusStarted {
+		return
+	}
+	t.twStatus = twStatusPaused
+	t.pause <- struct{}{}
 	return
 }
 
 func (t *timingwheel) Moveon() {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+	if t.twStatus != twStatusPaused {
+		return
+	}
+	t.twStatus = twStatusStarted
 	go t.drive()
 }
 
 func (t *timingwheel) Stop() {
-	t.signal <- struct{}{}
-	t.wheels = nil
-	t.sch.Close()
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+	if t.twStatus != twStatusStarted {
+		return
+	}
+	t.quit <- struct{}{}
+	t.twStatus = twStatusStoped
 }
 
 func (t *timingwheel) drive() {
@@ -109,15 +170,35 @@ func (t *timingwheel) drive() {
 					break
 				}
 			}
-		case <-t.signal:
+		case <-t.pause:
+			return
+		case <-t.quit:
+			for _, wheel := range t.wheels {
+				for _, slot := range wheel.slots {
+					slot.foreach(t.forceClose)
+				}
+			}
+			t.sch.Close()
 			return
 		}
 	}
-	return
 }
 
 func (t *timingwheel) iterate(data interface{}) error {
 	t.sch.PublishRequest(&scheduler.Request{Data: data, Handler: t.handle})
+	return nil
+}
+
+// TODO
+func (t *timingwheel) forceClose(data interface{}) error {
+	t.sch.PublishRequest(&scheduler.Request{Data: data, Handler: func(data interface{}) {
+		tick, _ := data.(*tick)
+		if tick.C == nil {
+			tick.handler(tick.data)
+		} else {
+			tick.C <- tick.data
+		}
+	}})
 	return nil
 }
 
@@ -162,6 +243,10 @@ func (t *timingwheel) indexesPerWheelBased(d uint64, base []uint) []uint {
 		if quotient == 0 {
 			break
 		}
+		if len(base) <= i {
+			ipw = append(ipw, uint(quotient))
+			break
+		}
 		quotient += uint64(base[i])
 		reminder = quotient % uint64(wheel.numSlots)
 		quotient = quotient / uint64(wheel.numSlots)
@@ -189,7 +274,7 @@ func calcuQuotients(num uint64) []uint {
 	return quos
 }
 
-//for debug
+// for debug
 func (t *timingwheel) Topology() ([]byte, error) {
 	j := simplejson.New()
 	var ws []*simplejson.Json

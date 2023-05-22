@@ -3,7 +3,7 @@ package timer
 import (
 	"sync"
 
-	"github.com/singchia/go-hammer/linker"
+	"github.com/singchia/go-timer/pkg/linker"
 )
 
 type slot struct {
@@ -17,8 +17,8 @@ func newSlot(w *wheel) *slot {
 }
 
 func (s *slot) add(tick *tick) *tick {
-	s.slotMutex.RLock()
-	defer s.slotMutex.RUnlock()
+	s.slotMutex.Lock()
+	defer s.slotMutex.Unlock()
 
 	doubID := s.dlinker.Add(tick)
 	tick.id = doubID
@@ -27,8 +27,8 @@ func (s *slot) add(tick *tick) *tick {
 }
 
 func (s *slot) delete(tick *tick) error {
-	s.slotMutex.RLock()
-	defer s.slotMutex.RUnlock()
+	s.slotMutex.Lock()
+	defer s.slotMutex.Unlock()
 	return s.dlinker.Delete(tick.id)
 }
 
@@ -46,12 +46,14 @@ func (s *slot) remove() *linker.Doublinker {
 }
 
 func (s *slot) foreach(handler linker.ForeachFunc) error {
+	s.slotMutex.RLock()
+	defer s.slotMutex.RUnlock()
 	return s.dlinker.Foreach(handler)
 }
 
 type Handler func(data interface{}) error
 
-//the real shit
+// the real shit
 type tick struct {
 	data     interface{}
 	C        chan interface{}
