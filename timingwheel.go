@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2021 Austin Zhai <singchia@163.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- */
 package timer
 
 import (
@@ -19,9 +11,10 @@ import (
 )
 
 const (
-	defaultTickInterval time.Duration = time.Millisecond
-	defaultTicks        uint64        = 1024 * 1024 * 1024 * 1024
-	defaultSlots        uint          = 256
+	//10 milliseconds is min interval gotimer can accept
+	MinTickInterval     time.Duration = 10 * time.Millisecond
+	DefaultTickInterval time.Duration = time.Second
+	DefaultMaxTicks     uint64        = 1024 * 1024 * 1024
 )
 
 var (
@@ -95,8 +88,8 @@ func (t *timingwheel) Time(d uint64, data interface{}, C chan interface{}, handl
 	if d == 0 || d > t.max-1 {
 		return nil, ErrInvalidDuration
 	}
-	for _, opt := range opts {
-		opt(tw.timerOption)
+	if C == nil && handler == nil {
+		C = make(chan interface{}, 1)
 	}
 	t.mtx.RLock()
 	if t.twStatus != twStatusStarted && t.twStatus != twStatusPaused {
@@ -172,9 +165,7 @@ func (t *timingwheel) drive() {
 		case <-driver.C:
 			for _, wheel := range t.wheels {
 				linker := wheel.incN(1)
-				if linker.Length() > 0 {
-					linker.Foreach(t.iterate)
-				}
+				linker.Foreach(t.iterate)
 				if wheel.cur != 0 {
 					break
 				}
@@ -218,15 +209,9 @@ func (t *timingwheel) handle(data interface{}) {
 		position--
 		if tick.ipw[position] > 0 {
 			t.wheels[position].add(tick.ipw[position], tick)
-			return nil
+			return
 		}
 	}
-	t.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: t.handle})
-	return nil
-}
-
-func (t *timingwheel) handle(data interface{}) {
-	tick, _ := data.(*tick)
 	if tick.C == nil {
 		tick.handler(tick.data)
 	} else {
@@ -234,10 +219,10 @@ func (t *timingwheel) handle(data interface{}) {
 	}
 }
 
-func (t *timingwheel) indexesPerWheel(d time.Duration) []uint {
+func (t *timingwheel) indexesPerWheel(d uint64) []uint {
 	var ipw []uint
 	var reminder uint64
-	var quotient = uint64((d + t.interval - 1) / t.interval)
+	var quotient = d
 	for i, wheel := range t.wheels {
 		if quotient == 0 {
 			break
@@ -250,10 +235,10 @@ func (t *timingwheel) indexesPerWheel(d time.Duration) []uint {
 	return ipw
 }
 
-func (t *timingwheel) indexesPerWheelBased(d time.Duration, base []uint) []uint {
+func (t *timingwheel) indexesPerWheelBased(d uint64, base []uint) []uint {
 	var ipw []uint
 	var reminder uint64
-	var quotient = uint64((d + t.interval - 1) / t.interval)
+	var quotient = d
 	for i, wheel := range t.wheels {
 		if quotient == 0 {
 			break
@@ -270,9 +255,8 @@ func (t *timingwheel) indexesPerWheelBased(d time.Duration, base []uint) []uint 
 	return ipw
 }
 
-func calcuWheels(num uint64) (uint64, int) {
-	count := uint64(defaultSlots)
-	length := 1
+func calcuQuotients(num uint64) []uint {
+	var quos []uint
 	for {
 		quo := num / 16
 		rem := num % 16
@@ -307,7 +291,10 @@ func (t *timingwheel) Topology() ([]byte, error) {
 			s.Set(fmt.Sprintf("slot%d", j), ts)
 			ss = append(ss, s)
 		}
-		break
+		w := simplejson.New()
+		w.Set(fmt.Sprintf("wheel%d", i), ss)
+		ws = append(ws, w)
 	}
-	return count, length
+	j.Set("wheels", ws)
+	return j.MarshalJSON()
 }

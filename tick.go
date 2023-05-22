@@ -1,23 +1,15 @@
-/*
- * Copyright (c) 2021 Austin Zhai <singchia@163.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- */
 package timer
 
 import (
-	"time"
+	"sync"
 
 	"github.com/singchia/go-timer/pkg/linker"
 )
 
-type tickOption struct {
-	data    interface{}
-	C       chan interface{}
-	handler Handler
+type slot struct {
+	dlinker   *linker.Doublinker
+	w         *wheel
+	slotMutex sync.RWMutex
 }
 
 func newSlot(w *wheel) *slot {
@@ -70,26 +62,22 @@ type tick struct {
 	s        *slot
 	ipw      []uint
 	duration uint64
-
 }
 
-func (t *tick) Delay(d time.Duration) {
-	t.delay = d
-	t.s.w.tw.operations <- &operation{
-		tick:     t,
-		opertype: operdelay,
-	}
-	return
+func (t *tick) Reset(data interface{}) error {
+	return t.s.update(t, data)
 }
 
-func (t *tick) Channel() <-chan interface{} {
+func (t *tick) Cancel() error {
+	return t.s.delete(t)
+}
+
+func (t *tick) Delay(d uint64) error {
+	t.s.delete(t)
+	_, err := t.s.w.tw.timeBased(d, t)
+	return err
+}
+
+func (t *tick) Tunnel() <-chan interface{} {
 	return t.C
-}
-
-func (t *tick) InsertTime() time.Time {
-	return t.insertTime
-}
-
-func (t *tick) Duration() time.Duration {
-	return t.duration
 }
