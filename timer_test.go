@@ -6,9 +6,8 @@ import (
 	"time"
 )
 
-func Test_SetInterval(t *testing.T) {
+func TestGoTimer(t *testing.T) {
 	tw := NewTimer()
-	tw.SetInterval(time.Second * 5)
 	tw.Start()
 	tick, _ := tw.Time(1, time.Now(), nil, nil)
 	o := <-tick.Tunnel()
@@ -32,74 +31,26 @@ func Test_Stop(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 }
 
-func Test_Pause(t *testing.T) {
-	tw := NewTimer()
-	tw.Start()
-	tick, _ := tw.Time(2, time.Now(), nil, nil)
-	tw.Pause()
-	select {
-	case <-tick.Tunnel():
-		t.Error("not paused")
-	case <-time.NewTimer(time.Second * 5).C:
-		t.Log("paused and timeout")
-	}
-	return
+	tick := tw.Time(time.Second)
+	<-tick.Channel()
+	t.Logf("%v %v", tick.InsertTime(), time.Now())
 }
 
-func Test_Moveon(t *testing.T) {
+func BenchmarkGoTimer(b *testing.B) {
 	tw := NewTimer()
 	tw.Start()
-	tick, _ := tw.Time(2, time.Now(), nil, nil)
-	tw.Pause()
-	time.Sleep(time.Second)
-	tw.Moveon()
-	o := <-tick.Tunnel()
-	elapse := time.Since(o.(time.Time))
-	t.Log(elapse)
-	return
+
+	for i := 0; i < b.N; i++ {
+		tw.Time(time.Second, WithHandler(func(data interface{}) error {
+			return nil
+		}))
+	}
 }
 
-func Test_Reset(t *testing.T) {
-	tw := NewTimer()
-	tw.Start()
-	tick, _ := tw.Time(2, 1, nil, nil)
-	tick.Reset(2)
-	o := <-tick.Tunnel()
-	if o.(int) != 2 {
-		t.Error(o)
-		return
+func BenchmarkBuildinTimer(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		time.NewTimer(time.Second)
 	}
-	return
-}
-
-func Test_Delay(t *testing.T) {
-	tw := NewTimer()
-	tw.Start()
-	tick, _ := tw.Time(1, time.Now(), nil, nil)
-	tick.Delay(2)
-	o := <-tick.Tunnel()
-	elapse := time.Since(o.(time.Time))
-	t.Log(elapse)
-	return
-}
-
-func Test_Cancel(t *testing.T) {
-	tw := NewTimer()
-	tw.Start()
-	tick, _ := tw.Time(1, time.Now(), nil, nil)
-	err := tick.Cancel()
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	select {
-	case <-tick.Tunnel():
-		t.Error("not paused")
-	case <-time.NewTimer(time.Second * 5).C:
-		t.Log("canceled and timeout")
-	}
-	return
-
 }
 
 func Benchmark_Delay(b *testing.B) {
