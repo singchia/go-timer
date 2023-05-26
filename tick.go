@@ -1,64 +1,83 @@
-/*
- * Copyright (c) 2021 Austin Zhai <singchia@163.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- */
 package timer
 
 import (
-	"time"
+	"sync"
 
-	"github.com/singchia/go-timer/v2/pkg/linker"
+	"github.com/singchia/go-timer/pkg/linker"
 )
 
-type tickOption struct {
-	data interface{}
-	C    chan interface{}
-	// for compatible
-	handler func(interface{}, error)
+type slot struct {
+	dlinker   *linker.Doublinker
+	w         *wheel
+	slotMutex sync.RWMutex
 }
+
+func newSlot(w *wheel) *slot {
+	return &slot{w: w, dlinker: linker.NewDoublinker()}
+}
+
+func (s *slot) add(tick *tick) *tick {
+	s.slotMutex.Lock()
+	defer s.slotMutex.Unlock()
+
+	doubID := s.dlinker.Add(tick)
+	tick.id = doubID
+	tick.s = s
+	return tick
+}
+
+func (s *slot) delete(tick *tick) error {
+	s.slotMutex.Lock()
+	defer s.slotMutex.Unlock()
+	return s.dlinker.Delete(tick.id)
+}
+
+func (s *slot) update(tick *tick, data interface{}) error {
+	tick.data = data
+	return nil
+}
+
+func (s *slot) remove() *linker.Doublinker {
+	s.slotMutex.Lock()
+	defer s.slotMutex.Unlock()
+	temp := s.dlinker
+	s.dlinker = linker.NewDoublinker()
+	return temp
+}
+
+func (s *slot) foreach(handler linker.ForeachFunc) error {
+	s.slotMutex.RLock()
+	defer s.slotMutex.RUnlock()
+	return s.dlinker.Foreach(handler)
+}
+
+type Handler func(data interface{}) error
 
 // the real shit
 type tick struct {
-	*tickOption
-	id         linker.DoubID
-	s          *slot
-	ipw        []uint
-	duration   time.Duration
-	delay      time.Duration
-	insertTime time.Time
+	data     interface{}
+	C        chan interface{}
+	handler  Handler
+	id       linker.DoubID
+	s        *slot
+	ipw      []uint
+	duration uint64
 }
 
-func (t *tick) Reset(data interface{}) {
-	t.s.update(t, data)
+func (t *tick) Reset(data interface{}) error {
+	return t.s.update(t, data)
 }
 
-func (t *tick) Cancel() {
-	t.s.w.tw.operations <- &operation{
-		tick:     t,
-		opertype: operdel,
-	}
+func (t *tick) Cancel() error {
+	return t.s.delete(t)
 }
 
-func (t *tick) Delay(d time.Duration) {
-	t.delay = d
-	t.s.w.tw.operations <- &operation{
-		tick:     t,
-		opertype: operdelay,
-	}
+func (t *tick) Delay(d uint64) error {
+	t.s.delete(t)
+	_, err := t.s.w.tw.timeBased(d, t)
+	return err
 }
 
-func (t *tick) Chan() <-chan interface{} {
+func (t *tick) Tunnel() <-chan interface{} {
 	return t.C
-}
-
-func (t *tick) InsertTime() time.Time {
-	return t.insertTime
-}
-
-func (t *tick) Duration() time.Duration {
-	return t.duration
 }

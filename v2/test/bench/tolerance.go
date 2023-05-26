@@ -73,7 +73,7 @@ func goTime(count int) (tolerance int64) {
 		}))
 	}
 	wait.Wait()
-	tw.Stop()
+	tw.Close()
 	return tolerance / int64(count)
 }
 
