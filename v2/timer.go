@@ -26,13 +26,13 @@ func WithData(data interface{}) TickOption {
 	}
 }
 
-func WithChan(C chan interface{}) TickOption {
+func WithChan(C chan *Event) TickOption {
 	return func(to *tickOption) {
-		to.C = C
+		to.ch = C
 	}
 }
 
-func WithHandler(handler func(data interface{}, err error)) TickOption {
+func WithHandler(handler func(*Event)) TickOption {
 	return func(to *tickOption) {
 		to.handler = handler
 	}
@@ -56,7 +56,7 @@ type Timer interface {
 	Moveon()
 }
 
-// Tick that set in Timer can be required from Timer.Time()
+// Tick that set in Timer can be required from Timer.Add()
 type Tick interface {
 	//To reset the data set at Timer.Time()
 	Reset(data interface{})
@@ -70,13 +70,20 @@ type Tick interface {
 	//To get the channel called at Timer.Time(),
 	//you will get the same channel if set, if not and handler is nil,
 	//then a new created channel will be returned.
-	Chan() <-chan interface{}
+	C() <-chan *Event
 
 	// Insert time
 	InsertTime() time.Time
 
 	// Duration
 	Duration() time.Duration
+}
+
+type Event struct {
+	Duration   time.Duration
+	InsertTIme time.Time
+	Data       interface{}
+	Error      error
 }
 
 // Entry

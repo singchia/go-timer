@@ -14,8 +14,8 @@ func main() {
 	ch := make(chan struct{}, 1024)
 
 	http.HandleFunc("/bench", func(w http.ResponseWriter, req *http.Request) {
-		tw.Add(1, gotime.WithData(w), gotime.WithHandler(func(data interface{}, err error) {
-			rw := data.(http.ResponseWriter)
+		tw.Add(1, gotime.WithData(w), gotime.WithHandler(func(event *gotime.Event) {
+			rw := event.Data.(http.ResponseWriter)
 			rw.WriteHeader(http.StatusFound)
 			ch <- struct{}{}
 		}))

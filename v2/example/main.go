@@ -10,11 +10,11 @@ import (
 func main() {
 	t := timer.NewTimer()
 	t.Start()
-	ch := make(chan interface{})
+	ch := make(chan *timer.Event)
 	old := time.Now()
 
 	tick := t.Add(5, timer.WithData(1), timer.WithChan(ch))
-	<-tick.Chan()
+	<-tick.C()
 	elapse := time.Now().Sub(old)
 	fmt.Printf("time diff: %d", elapse)
 }

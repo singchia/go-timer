@@ -103,8 +103,8 @@ func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
 	for _, opt := range opts {
 		opt(tick.tickOption)
 	}
-	if tick.C == nil && tick.handler == nil {
-		tick.C = make(chan interface{}, 1)
+	if tick.ch == nil && tick.handler == nil {
+		tick.ch = make(chan *Event, 1)
 	}
 	tw.operations <- &operation{tick, operadd}
 	return tick
@@ -206,23 +206,44 @@ func (t *timingwheel) iterate(data interface{}) error {
 			return nil
 		}
 	}
-	t.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: t.handle})
+	t.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: t.handleNormal})
 	return nil
 }
 
 // TODO
 func (t *timingwheel) forceClose(data interface{}) error {
 	tick, _ := data.(*tick)
-	t.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: t.handle})
+	t.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: t.handleError})
 	return nil
 }
 
-func (t *timingwheel) handle(data interface{}) {
+func (t *timingwheel) handleError(data interface{}) {
 	tick, _ := data.(*tick)
-	if tick.C == nil {
-		tick.handler(tick.data, nil)
+	event := &Event{
+		Duration:   tick.duration,
+		InsertTIme: tick.insertTime,
+		Data:       tick.data,
+		Error:      ErrTimerForceClosed,
+	}
+	if tick.ch == nil {
+		tick.handler(event)
 	} else {
-		tick.C <- tick.data
+		tick.ch <- event
+	}
+}
+
+func (t *timingwheel) handleNormal(data interface{}) {
+	tick, _ := data.(*tick)
+	event := &Event{
+		Duration:   tick.duration,
+		InsertTIme: tick.insertTime,
+		Data:       tick.data,
+		Error:      nil,
+	}
+	if tick.ch == nil {
+		tick.handler(event)
+	} else {
+		tick.ch <- event
 	}
 }
 
