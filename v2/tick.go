@@ -15,10 +15,9 @@ import (
 )
 
 type tickOption struct {
-	data interface{}
-	C    chan interface{}
-	// for compatible
-	handler func(interface{}, error)
+	data    interface{}
+	ch      chan *Event
+	handler func(*Event)
 }
 
 // the real shit
@@ -51,8 +50,8 @@ func (t *tick) Delay(d time.Duration) {
 	}
 }
 
-func (t *tick) Chan() <-chan interface{} {
-	return t.C
+func (t *tick) C() <-chan *Event {
+	return t.ch
 }
 
 func (t *tick) InsertTime() time.Time {

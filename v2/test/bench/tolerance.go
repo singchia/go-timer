@@ -65,9 +65,9 @@ func goTime(count int) (tolerance int64) {
 	for i := 0; i < count; i++ {
 		wait.Add(1)
 		t := time.Now()
-		tw.Add(time.Duration(grain), gotime.WithData(t), gotime.WithHandler(func(data interface{}, _ error) {
+		tw.Add(time.Duration(grain), gotime.WithData(t), gotime.WithHandler(func(event *gotime.Event) {
 			defer wait.Done()
-			t = data.(time.Time)
+			t = event.Data.(time.Time)
 			thisToler := int64(math.Abs(float64(time.Since(t) - time.Duration(grain))))
 			atomic.AddInt64(&tolerance, thisToler)
 		}))

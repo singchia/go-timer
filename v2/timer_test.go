@@ -10,7 +10,7 @@ func TestGoTimer(t *testing.T) {
 	tw.Start()
 
 	tick := tw.Add(time.Second)
-	<-tick.Chan()
+	<-tick.C()
 	t.Logf("%v %v", tick.InsertTime(), time.Now())
 }
 
@@ -19,7 +19,7 @@ func BenchmarkGoTimer(b *testing.B) {
 	tw.Start()
 
 	for i := 0; i < b.N; i++ {
-		tw.Add(time.Second, WithHandler(func(data interface{}, err error) {
+		tw.Add(time.Second, WithHandler(func(event *Event) {
 		}))
 	}
 }
