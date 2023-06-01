@@ -46,6 +46,7 @@ const (
 type operation struct {
 	tick     *tick
 	opertype opertype
+	delay    time.Duration
 }
 
 type timerOption struct {
@@ -97,6 +98,7 @@ func (tw *timingwheel) setWheels(max uint64, length int) {
 func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
 	tick := &tick{
 		duration:   d,
+		tw:         tw,
 		insertTime: time.Now(),
 		tickOption: &tickOption{},
 	}
@@ -106,7 +108,10 @@ func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
 	if tick.ch == nil && tick.handler == nil {
 		tick.ch = make(chan *Event, 1)
 	}
-	tw.operations <- &operation{tick, operadd}
+	tw.operations <- &operation{
+		tick:     tick,
+		opertype: operadd,
+	}
 	return tick
 }
 

@@ -20,33 +20,50 @@ type tickOption struct {
 	handler func(*Event)
 }
 
+type status int
+
+const (
+	statusAdd = iota
+	statusWait
+	statusFiring
+	statusFired
+)
+
 // the real shit
 type tick struct {
+	// user interface
 	*tickOption
-	id         linker.DoubID
-	s          *slot
-	ipw        []uint
+
+	// location
+	id  linker.DoubID
+	s   *slot
+	tw  *timingwheel
+	ipw []uint
+
+	// meta
 	duration   time.Duration
 	delay      time.Duration
 	insertTime time.Time
+
+	// status
 }
 
 func (t *tick) Reset(data interface{}) {
-	t.s.update(t, data)
+	t.data = data
 }
 
 func (t *tick) Cancel() {
-	t.s.w.tw.operations <- &operation{
+	t.tw.operations <- &operation{
 		tick:     t,
 		opertype: operdel,
 	}
 }
 
 func (t *tick) Delay(d time.Duration) {
-	t.delay = d
-	t.s.w.tw.operations <- &operation{
+	t.tw.operations <- &operation{
 		tick:     t,
 		opertype: operdelay,
+		delay:    d,
 	}
 }
 
