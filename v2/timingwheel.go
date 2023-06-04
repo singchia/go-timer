@@ -120,6 +120,12 @@ func (tw *timingwheel) setWheels(max uint64, length int) {
 }
 
 func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
+	tw.mtx.RLock()
+	defer tw.mtx.RUnlock()
+	if tw.twStatus != twStatusStarted {
+		return nil
+	}
+
 	tick := &tick{
 		duration:   d,
 		tw:         tw,
@@ -198,7 +204,10 @@ func (tw *timingwheel) drive() {
 					break
 				}
 			}
-		case operation := <-tw.operations:
+		case operation, ok := <-tw.operations:
+			if !ok {
+				continue
+			}
 			switch operation.operType {
 			case operAdd:
 				// the specific tick's add operation must be before the del or delay operation
@@ -273,8 +282,11 @@ func (tw *timingwheel) drive() {
 				}
 			}
 			tw.sch.Close()
+			goto END
 		}
 	}
+END:
+	driver.Stop()
 }
 
 func (tw *timingwheel) iterate(data interface{}) error {
