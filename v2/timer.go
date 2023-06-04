@@ -26,6 +26,12 @@ func WithData(data interface{}) TickOption {
 	}
 }
 
+func WithCyclically() TickOption {
+	return func(to *tickOption) {
+		to.cyclically = true
+	}
+}
+
 func WithChan(C chan *Event) TickOption {
 	return func(to *tickOption) {
 		to.ch = C
@@ -59,13 +65,13 @@ type Timer interface {
 // Tick that set in Timer can be required from Timer.Add()
 type Tick interface {
 	//To reset the data set at Timer.Time()
-	Reset(data interface{})
+	Reset(data interface{}) error
 
 	//To cancel the tick
-	Cancel()
+	Cancel() error
 
-	//Delay the tick if not timeout
-	Delay(d time.Duration)
+	//Delay the tick
+	Delay(d time.Duration) error
 
 	//To get the channel called at Timer.Time(),
 	//you will get the same channel if set, if not and handler is nil,
@@ -75,8 +81,11 @@ type Tick interface {
 	// Insert time
 	InsertTime() time.Time
 
-	// Duration
+	// The tick duration original set
 	Duration() time.Duration
+
+	// Fired count
+	Fired() int64
 }
 
 type Event struct {

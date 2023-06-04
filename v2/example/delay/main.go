@@ -34,16 +34,21 @@ func main() {
 			}
 			atomic.AddInt32(&fired, 1)
 		}))
-		tick.Delay(delay)
+		err := tick.Delay(delay)
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
 	}
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	tick := tw.Add(time.Second, timer.WithCyclically())
 	for {
 		select {
 		case <-sigs:
 			goto END
-		case <-time.NewTimer(time.Second).C:
+		case <-tick.C():
 			log.Println(n, fired)
 		}
 	}
