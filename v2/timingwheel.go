@@ -106,6 +106,7 @@ func newTimingwheel(opts ...TimerOption) *timingwheel {
 		opt(tw.timerOption)
 	}
 	tw.setWheels(max, length)
+	tw.sch.SetMaxGoroutines(1000)
 	tw.sch.StartSchedule()
 	return tw
 }
@@ -119,6 +120,12 @@ func (tw *timingwheel) setWheels(max uint64, length int) {
 }
 
 func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
+	tw.mtx.RLock()
+	defer tw.mtx.RUnlock()
+	if tw.twStatus != twStatusStarted {
+		return nil
+	}
+
 	tick := &tick{
 		duration:   d,
 		tw:         tw,
@@ -178,6 +185,7 @@ func (tw *timingwheel) Close() {
 		return
 	}
 	tw.quit <- struct{}{}
+	close(tw.operations)
 	tw.twStatus = twStatusStoped
 }
 
@@ -196,7 +204,10 @@ func (tw *timingwheel) drive() {
 					break
 				}
 			}
-		case operation := <-tw.operations:
+		case operation, ok := <-tw.operations:
+			if !ok {
+				continue
+			}
 			switch operation.operType {
 			case operAdd:
 				// the specific tick's add operation must be before the del or delay operation
@@ -219,6 +230,7 @@ func (tw *timingwheel) drive() {
 				operation.retCh <- &operationRet{
 					operRetType: operOK,
 				}
+				operation.tick.status = statusCanceled
 
 			case operDelay:
 				if operation.tick.status != statusWait {
@@ -231,7 +243,7 @@ func (tw *timingwheel) drive() {
 				operation.tick.s.delete(operation.tick)
 				ipw := tw.indexesPerWheelBased(operation.delay, operation.tick.ipw)
 				operation.tick.ipw = ipw
-				operation.tick.duration += operation.delay
+				operation.tick.delay = operation.delay
 				tw.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
 				operation.retCh <- &operationRet{
 					operRetType: operOK,
@@ -253,73 +265,113 @@ func (tw *timingwheel) drive() {
 		case <-tw.pause:
 			return
 		case <-tw.quit:
+			for operation := range tw.operations {
+				switch operation.operType {
+				case operCancel, operDelay, operReset:
+					operation.retCh <- &operationRet{
+						operRetType: operErr,
+						err:         ErrTimerForceClosed,
+					}
+				case operAdd:
+					continue
+				}
+			}
 			for _, wheel := range tw.wheels {
 				for _, slot := range wheel.slots {
 					slot.foreach(tw.forceClose)
 				}
 			}
 			tw.sch.Close()
+			goto END
 		}
 	}
+END:
+	driver.Stop()
 }
 
 func (tw *timingwheel) iterate(data interface{}) error {
-	tick, _ := data.(*tick)
-	position := tick.s.w.position
+	tk, _ := data.(*tick)
+	if tk.status == statusCanceled {
+		return nil
+	}
+	position := tk.s.w.position
 	for position > 0 {
 		position--
-		if tick.ipw[position] > 0 {
-			tw.wheels[position].add(tick.ipw[position], tick)
+		if tk.ipw[position] > 0 {
+			tw.wheels[position].add(tk.ipw[position], tk)
 			return nil
 		}
 	}
-	tick.status = statusFire
-	tw.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: tw.handleNormal})
-	if tick.cyclically {
-		ipw := tw.indexesPerWheelBased(tick.duration, tick.ipw)
-		tick.ipw = ipw
-		tw.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
+	tk.status = statusFire
+	if !tk.cyclically {
+		tw.sch.PublishRequest(&scheduler.Request{Data: tk, Handler: tw.handleNormal})
+		return nil
 	}
-	tick.status = statusWait
+	// copy the tick, since the data might be Reset.
+	tickCopy := &tick{
+		tickOption: &tickOption{
+			data:    tk.data,
+			ch:      tk.ch,
+			handler: tk.handler,
+		},
+		insertTime: tk.insertTime,
+		duration:   tk.duration,
+		fired:      tk.fired,
+	}
+	tw.sch.PublishRequest(&scheduler.Request{Data: tickCopy, Handler: tw.handleNormal})
+
+	ipw := tw.indexesPerWheelBased(tk.duration, tk.ipw)
+	tk.ipw = ipw
+	tw.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tk)
+	tk.status = statusWait
 	return nil
 }
 
 // TODO
 func (tw *timingwheel) forceClose(data interface{}) error {
 	tick, _ := data.(*tick)
+	if tick.status == statusCanceled {
+		return nil
+	}
 	tick.status = statusFire
 	tw.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: tw.handleError})
 	return nil
 }
 
 func (tw *timingwheel) handleError(data interface{}) {
-	tick, _ := data.(*tick)
+	tk, _ := data.(*tick)
+	if tk.status == statusCanceled {
+		return
+	}
 	event := &Event{
-		Duration:   tick.duration,
-		InsertTIme: tick.insertTime,
-		Data:       tick.data,
+		Duration:   tk.duration,
+		InsertTIme: tk.insertTime,
+		Data:       tk.data,
 		Error:      ErrTimerForceClosed,
 	}
-	if tick.ch == nil {
-		tick.handler(event)
+	if tk.ch == nil {
+		tk.handler(event)
 	} else {
-		tick.ch <- event
+		tk.ch <- event
 	}
 }
 
 func (tw *timingwheel) handleNormal(data interface{}) {
-	tick, _ := data.(*tick)
-	atomic.AddInt64(&tick.fired, 1)
+	tk, _ := data.(*tick)
+	if tk.status == statusCanceled {
+		return
+	}
+	atomic.AddInt64(&tk.fired, 1)
 	event := &Event{
-		Duration:   tick.duration,
-		InsertTIme: tick.insertTime,
-		Data:       tick.data,
+		Duration:   tk.duration,
+		InsertTIme: tk.insertTime,
+		Data:       tk.data,
 		Error:      nil,
 	}
-	if tick.ch == nil {
-		tick.handler(event)
+	if tk.ch == nil {
+		tk.handler(event)
 	} else {
-		tick.ch <- event
+		tk.ch <- event
 	}
 }
 

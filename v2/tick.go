@@ -69,6 +69,9 @@ func (t *tick) Reset(data interface{}) error {
 }
 
 func (t *tick) Cancel() error {
+	t.tw.mtx.RLock()
+	defer t.tw.mtx.RUnlock()
+
 	ch := make(chan *operationRet)
 	t.tw.operations <- &operation{
 		tick:     t,
@@ -82,6 +85,7 @@ func (t *tick) Cancel() error {
 	return ret.err
 }
 
+// TODO revision
 func (t *tick) Delay(d time.Duration) error {
 	if t.cyclically {
 		return ErrDelayOnCyclically
