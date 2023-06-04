@@ -9,15 +9,17 @@
 package timer
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/singchia/go-timer/v2/pkg/linker"
 )
 
 type tickOption struct {
-	data    interface{}
-	ch      chan *Event
-	handler func(*Event)
+	data       interface{}
+	ch         chan *Event
+	handler    func(*Event)
+	cyclically bool
 }
 
 type status int
@@ -25,8 +27,8 @@ type status int
 const (
 	statusAdd = iota
 	statusWait
-	statusFiring
-	statusFired
+	statusFire
+	statusCanceled
 )
 
 // the real shit
@@ -46,25 +48,60 @@ type tick struct {
 	insertTime time.Time
 
 	// status
+	fired  int64
+	status status
 }
 
-func (t *tick) Reset(data interface{}) {
-	t.data = data
-}
-
-func (t *tick) Cancel() {
+// TODO revision
+func (t *tick) Reset(data interface{}) error {
+	ch := make(chan *operationRet)
 	t.tw.operations <- &operation{
 		tick:     t,
-		opertype: operdel,
+		operType: operReset,
+		retCh:    ch,
+		data:     data,
 	}
+	ret, ok := <-ch
+	if !ok {
+		return ErrOperationForceClosed
+	}
+	return ret.err
 }
 
-func (t *tick) Delay(d time.Duration) {
+func (t *tick) Cancel() error {
+	ch := make(chan *operationRet)
 	t.tw.operations <- &operation{
 		tick:     t,
-		opertype: operdelay,
+		operType: operCancel,
+		retCh:    ch,
+	}
+	ret, ok := <-ch
+	if !ok {
+		return ErrOperationForceClosed
+	}
+	return ret.err
+}
+
+func (t *tick) Delay(d time.Duration) error {
+	if t.cyclically {
+		return ErrDelayOnCyclically
+	}
+	ch := make(chan *operationRet)
+	t.tw.operations <- &operation{
+		tick:     t,
+		operType: operDelay,
 		delay:    d,
+		retCh:    ch,
 	}
+	ret, ok := <-ch
+	if !ok {
+		return ErrOperationForceClosed
+	}
+	return ret.err
+}
+
+func (t *tick) Fired() int64 {
+	return atomic.LoadInt64(&t.fired)
 }
 
 func (t *tick) C() <-chan *Event {

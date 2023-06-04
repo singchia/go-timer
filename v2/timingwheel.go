@@ -11,21 +11,25 @@ package timer
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/singchia/go-timer/pkg/scheduler"
 )
 
 const (
-	defaultTickInterval time.Duration = time.Millisecond
+	defaultTickInterval time.Duration = 100 * time.Millisecond
 	defaultTicks        uint64        = 1024 * 1024 * 1024 * 1024
 	defaultSlots        uint          = 256
 )
 
 var (
-	ErrDurationOutOfRange = errors.New("duration out of range")
-	ErrTimerNotStarted    = errors.New("timer not started")
-	ErrTimerForceClosed   = errors.New("timer force closed")
+	ErrDurationOutOfRange   = errors.New("duration out of range")
+	ErrTimerNotStarted      = errors.New("timer not started")
+	ErrTimerForceClosed     = errors.New("timer force closed")
+	ErrOperationForceClosed = errors.New("operation force closed")
+	ErrDelayOnCyclically    = errors.New("cannot delay on cyclically tick")
+	ErrCancelOnNonWait      = errors.New("cannot cancel on firing or fired tick")
 )
 
 const (
@@ -35,20 +39,39 @@ const (
 	twStatusStoped
 )
 
-type opertype int
+// operation type and return
+type operType int
 
 const (
-	operdel opertype = iota
-	operadd
-	operdelay
+	operAdd operType = iota
+	operCancel
+	operDelay
+	operReset
 )
 
 type operation struct {
 	tick     *tick
-	opertype opertype
-	delay    time.Duration
+	operType operType
+	retCh    chan *operationRet
+	// for delay
+	delay time.Duration
+	// for reset
+	data interface{}
 }
 
+type operRetType int
+
+const (
+	operOK operRetType = iota
+	operErr
+)
+
+type operationRet struct {
+	operRetType operRetType
+	err         error
+}
+
+// timer options
 type timerOption struct {
 	interval time.Duration
 }
@@ -101,6 +124,7 @@ func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
 		tw:         tw,
 		insertTime: time.Now(),
 		tickOption: &tickOption{},
+		status:     statusAdd,
 	}
 	for _, opt := range opts {
 		opt(tick.tickOption)
@@ -110,119 +134,165 @@ func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
 	}
 	tw.operations <- &operation{
 		tick:     tick,
-		opertype: operadd,
+		operType: operAdd,
 	}
 	return tick
 }
 
-func (t *timingwheel) Start() {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	if t.twStatus != twStatusInit && t.twStatus != twStatusPaused {
+func (tw *timingwheel) Start() {
+	tw.mtx.Lock()
+	defer tw.mtx.Unlock()
+	if tw.twStatus != twStatusInit && tw.twStatus != twStatusPaused {
 		return
 	}
-	t.twStatus = twStatusStarted
-	go t.drive()
+	tw.twStatus = twStatusStarted
+	go tw.drive()
 	return
 }
 
-func (t *timingwheel) Pause() {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	if t.twStatus != twStatusStarted {
+func (tw *timingwheel) Pause() {
+	tw.mtx.Lock()
+	defer tw.mtx.Unlock()
+	if tw.twStatus != twStatusStarted {
 		return
 	}
-	t.twStatus = twStatusPaused
-	t.pause <- struct{}{}
+	tw.twStatus = twStatusPaused
+	tw.pause <- struct{}{}
 	return
 }
 
-func (t *timingwheel) Moveon() {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	if t.twStatus != twStatusPaused {
+func (tw *timingwheel) Moveon() {
+	tw.mtx.Lock()
+	defer tw.mtx.Unlock()
+	if tw.twStatus != twStatusPaused {
 		return
 	}
-	t.twStatus = twStatusStarted
-	go t.drive()
+	tw.twStatus = twStatusStarted
+	go tw.drive()
 }
 
-func (t *timingwheel) Close() {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	if t.twStatus != twStatusStarted {
+func (tw *timingwheel) Close() {
+	tw.mtx.Lock()
+	defer tw.mtx.Unlock()
+	if tw.twStatus != twStatusStarted {
 		return
 	}
-	t.quit <- struct{}{}
-	t.twStatus = twStatusStoped
+	tw.quit <- struct{}{}
+	tw.twStatus = twStatusStoped
 }
 
-func (t *timingwheel) drive() {
-	driver := time.NewTicker(t.interval)
+func (tw *timingwheel) drive() {
+	driver := time.NewTicker(tw.interval)
 	for {
 		select {
 		case <-driver.C:
-			for _, wheel := range t.wheels {
+			// fire all ready tick
+			for _, wheel := range tw.wheels {
 				linker := wheel.incN(1)
 				if linker.Length() > 0 {
-					linker.Foreach(t.iterate)
+					linker.Foreach(tw.iterate)
 				}
 				if wheel.cur != 0 {
 					break
 				}
 			}
-		case operation := <-t.operations:
-			switch operation.opertype {
-			case operadd:
-				ipw := t.indexesPerWheel(operation.tick.duration)
+		case operation := <-tw.operations:
+			switch operation.operType {
+			case operAdd:
+				// the specific tick's add operation must be before the del or delay operation
+				// so we don't care the status cause it must be statusAdd
+				ipw := tw.indexesPerWheel(operation.tick.duration)
 				operation.tick.ipw = ipw
-				t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
+				tw.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
+				operation.tick.status = statusWait
 
-			case operdel:
+			case operCancel:
+				// only in wait status can delete the tick
+				if operation.tick.status != statusWait {
+					operation.retCh <- &operationRet{
+						operRetType: operErr,
+						err:         ErrCancelOnNonWait,
+					}
+					continue
+				}
 				operation.tick.s.delete(operation.tick)
+				operation.retCh <- &operationRet{
+					operRetType: operOK,
+				}
 
-			case operdelay:
+			case operDelay:
+				if operation.tick.status != statusWait {
+					operation.retCh <- &operationRet{
+						operRetType: operErr,
+						err:         ErrCancelOnNonWait,
+					}
+					continue
+				}
 				operation.tick.s.delete(operation.tick)
-				ipw := t.indexesPerWheelBased(operation.tick.delay, operation.tick.ipw)
+				ipw := tw.indexesPerWheelBased(operation.delay, operation.tick.ipw)
 				operation.tick.ipw = ipw
-				operation.tick.duration += operation.tick.delay
-				t.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
-			}
-		case <-t.pause:
-			return
-		case <-t.quit:
-			for _, wheel := range t.wheels {
-				for _, slot := range wheel.slots {
-					slot.foreach(t.forceClose)
+				operation.tick.duration += operation.delay
+				tw.wheels[len(ipw)-1].add(ipw[len(ipw)-1], operation.tick)
+				operation.retCh <- &operationRet{
+					operRetType: operOK,
+				}
+
+			case operReset:
+				if operation.tick.status != statusWait {
+					operation.retCh <- &operationRet{
+						operRetType: operErr,
+						err:         ErrCancelOnNonWait,
+					}
+					continue
+				}
+				operation.tick.data = operation.data
+				operation.retCh <- &operationRet{
+					operRetType: operOK,
 				}
 			}
-			t.sch.Close()
+		case <-tw.pause:
+			return
+		case <-tw.quit:
+			for _, wheel := range tw.wheels {
+				for _, slot := range wheel.slots {
+					slot.foreach(tw.forceClose)
+				}
+			}
+			tw.sch.Close()
 		}
 	}
 }
 
-func (t *timingwheel) iterate(data interface{}) error {
+func (tw *timingwheel) iterate(data interface{}) error {
 	tick, _ := data.(*tick)
 	position := tick.s.w.position
 	for position > 0 {
 		position--
 		if tick.ipw[position] > 0 {
-			t.wheels[position].add(tick.ipw[position], tick)
+			tw.wheels[position].add(tick.ipw[position], tick)
 			return nil
 		}
 	}
-	t.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: t.handleNormal})
+	tick.status = statusFire
+	tw.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: tw.handleNormal})
+	if tick.cyclically {
+		ipw := tw.indexesPerWheelBased(tick.duration, tick.ipw)
+		tick.ipw = ipw
+		tw.wheels[len(ipw)-1].add(ipw[len(ipw)-1], tick)
+	}
+	tick.status = statusWait
 	return nil
 }
 
 // TODO
-func (t *timingwheel) forceClose(data interface{}) error {
+func (tw *timingwheel) forceClose(data interface{}) error {
 	tick, _ := data.(*tick)
-	t.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: t.handleError})
+	tick.status = statusFire
+	tw.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: tw.handleError})
 	return nil
 }
 
-func (t *timingwheel) handleError(data interface{}) {
+func (tw *timingwheel) handleError(data interface{}) {
 	tick, _ := data.(*tick)
 	event := &Event{
 		Duration:   tick.duration,
@@ -237,8 +307,9 @@ func (t *timingwheel) handleError(data interface{}) {
 	}
 }
 
-func (t *timingwheel) handleNormal(data interface{}) {
+func (tw *timingwheel) handleNormal(data interface{}) {
 	tick, _ := data.(*tick)
+	atomic.AddInt64(&tick.fired, 1)
 	event := &Event{
 		Duration:   tick.duration,
 		InsertTIme: tick.insertTime,
@@ -252,15 +323,15 @@ func (t *timingwheel) handleNormal(data interface{}) {
 	}
 }
 
-func (t *timingwheel) indexesPerWheel(d time.Duration) []uint {
+func (tw *timingwheel) indexesPerWheel(d time.Duration) []uint {
 	var ipw []uint
 	var reminder uint64
-	var quotient = uint64((d + t.interval - 1) / t.interval)
-	for i, wheel := range t.wheels {
+	var quotient = uint64((d + tw.interval - 1) / tw.interval)
+	for i, wheel := range tw.wheels {
 		if quotient == 0 {
 			break
 		}
-		quotient += uint64(t.wheels[i].cur)
+		quotient += uint64(tw.wheels[i].cur)
 		reminder = quotient % uint64(wheel.numSlots)
 		quotient = quotient / uint64(wheel.numSlots)
 		ipw = append(ipw, uint(reminder))
@@ -268,11 +339,11 @@ func (t *timingwheel) indexesPerWheel(d time.Duration) []uint {
 	return ipw
 }
 
-func (t *timingwheel) indexesPerWheelBased(d time.Duration, base []uint) []uint {
+func (tw *timingwheel) indexesPerWheelBased(d time.Duration, base []uint) []uint {
 	var ipw []uint
 	var reminder uint64
-	var quotient = uint64((d + t.interval - 1) / t.interval)
-	for i, wheel := range t.wheels {
+	var quotient = uint64((d + tw.interval - 1) / tw.interval)
+	for i, wheel := range tw.wheels {
 		if quotient == 0 {
 			break
 		}
