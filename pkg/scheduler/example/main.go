@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/singchia/go-timer/pkg/scheduler"
+	"github.com/singchia/go-timer/v2/pkg/scheduler"
 )
 
 func main() {

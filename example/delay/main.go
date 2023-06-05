@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"math"
 	"math/rand"
 	"net/http"
 	_ "net/http/pprof"
@@ -12,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/singchia/go-timer"
+	timer "github.com/singchia/go-timer/v2"
 )
 
 func main() {
@@ -22,34 +21,34 @@ func main() {
 	}
 	go server.ListenAndServe()
 	n := 100000
-	delay := 14
+	delay := 14 * time.Second
 	tw := timer.NewTimer()
 	tw.Start()
 	fired := int32(0)
 	for i := 0; i < n; i++ {
-		second := uint64(rand.Intn(10) + 1)
-		tick, err := tw.Time(second, time.Now(), nil, func(data interface{}) error {
-			elapse := time.Since(data.(time.Time).Add(time.Duration(second) * time.Second)).Seconds()
-			abs := int(math.Abs(elapse))
-			if abs < delay-1 || abs > delay+1 {
-				log.Println(elapse)
+		second := time.Duration(rand.Intn(10)+1) * time.Second
+		tick := tw.Add(second, timer.WithData(time.Now()), timer.WithHandler(func(event *timer.Event) {
+			elapse := time.Since(event.Data.(time.Time).Add(second))
+			if elapse < delay-time.Second || elapse > delay+time.Second {
+				log.Println(elapse.Seconds())
 			}
 			atomic.AddInt32(&fired, 1)
-			return nil
-		})
+		}))
+		err := tick.Delay(delay)
 		if err != nil {
 			log.Fatal(err)
+			return
 		}
-		tick.Delay(uint64(delay))
 	}
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	tick := tw.Add(time.Second, timer.WithCyclically())
 	for {
 		select {
 		case <-sigs:
 			goto END
-		case <-time.NewTimer(time.Second).C:
+		case <-tick.C():
 			log.Println(n, fired)
 		}
 	}

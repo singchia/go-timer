@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -11,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/singchia/go-timer"
+	timer "github.com/singchia/go-timer/v2"
 )
 
 func main() {
@@ -25,24 +26,24 @@ func main() {
 	tw.Start()
 	fired := int32(0)
 	for i := 0; i < n; i++ {
-		second := uint64(rand.Intn(10) + 1)
-		_, err := tw.Time(second, time.Now(), nil, func(data interface{}) error {
+		second := time.Duration(rand.Intn(10)+1) * time.Second
+		tick := tw.Add(second, timer.WithData(time.Now()), timer.WithHandler(func(event *timer.Event) {
 			atomic.AddInt32(&fired, 1)
-			return nil
-		})
-		if err != nil {
-			log.Fatal(err)
+		}))
+		if tick == nil {
+			fmt.Println("tick nil")
 		}
 	}
-	tw.Stop()
+	tw.Close()
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	tick := time.NewTicker(time.Second)
 	for {
 		select {
 		case <-sigs:
 			goto END
-		case <-time.NewTimer(time.Second).C:
+		case <-tick.C:
 			log.Println(n, fired)
 		}
 	}

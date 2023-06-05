@@ -1,45 +1,68 @@
+/*
+ * Copyright (c) 2021 Austin Zhai <singchia@163.com>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; either version 2 of
+ * the License, or (at your option) any later version.
+ */
 package timer
 
 import "time"
 
+type TimerOption func(*timerOption)
+
+func WithTimeInterval(interval time.Duration) TimerOption {
+	return func(to *timerOption) {
+		to.interval = interval
+	}
+}
+
+type TickOption func(*tickOption)
+
+func WithData(data interface{}) TickOption {
+	return func(to *tickOption) {
+		to.data = data
+	}
+}
+
+func WithCyclically() TickOption {
+	return func(to *tickOption) {
+		to.cyclically = true
+	}
+}
+
+func WithChan(C chan *Event) TickOption {
+	return func(to *tickOption) {
+		to.ch = C
+	}
+}
+
+func WithHandler(handler func(*Event)) TickOption {
+	return func(to *tickOption) {
+		to.handler = handler
+	}
+}
+
 type Timer interface {
-	//SetMaxTicks sets the max number of ticks,
-	//it should be called before Start if you want to customize it.
-	//Default 1024*1024*1024 ticks
-	SetMaxTicks(max uint64)
+	Add(d time.Duration, opts ...TickOption) Tick
 
-	//SetInterval set the time lapse between two ticks.
-	//it should be called before Start if you want to customize it.
-	//Default 1 second.
-	//And the whole time lapse should be maxTicks*interval.
-	//Note that the max tick you can preset is (maxTicks*interval-1),
-	//because current tick cannot be set.
-	SetInterval(interval time.Duration)
-
-	//Time preset a Tick which will be triggered after d ticks,
-	//you can set channel C, and after d ticks, data would be consumed from C.
-	//Or you can set func handler, after d ticks, data would be handled
-	//by handler in go-timer. If neither one be set, go-timer will generate a channel,
-	//it's attatched with return value Tick, get it by Tick.Tunnel().
-	//Time must be called after Timer.Start.
-	Time(d uint64, data interface{}, C chan interface{}, handler Handler) (Tick, error)
-
-	//Start to start timer.
+	// Start to start timer.
 	Start()
 
-	//Stop to stop timer,
-	//all ticks set would be discarded.
-	Stop()
+	// Close to close timer,
+	// all ticks set would be discarded.
+	Close()
 
-	//Pause the timer,
-	//all ticks won't continue after Timer.Movenon().
+	// Pause the timer,
+	// all ticks won't continue after Timer.Movenon().
 	Pause()
 
-	//Continue the paused timer.
+	// Continue the paused timer.
 	Moveon()
 }
 
-//Tick that set in Timer can be required from Timer.Time()
+// Tick that set in Timer can be required from Timer.Add()
 type Tick interface {
 	//To reset the data set at Timer.Time()
 	Reset(data interface{}) error
@@ -47,16 +70,32 @@ type Tick interface {
 	//To cancel the tick
 	Cancel() error
 
-	//Delay the tick if not timeout
-	Delay(d uint64) error
+	//Delay the tick
+	Delay(d time.Duration) error
 
 	//To get the channel called at Timer.Time(),
 	//you will get the same channel if set, if not and handler is nil,
 	//then a new created channel will be returned.
-	Tunnel() <-chan interface{}
+	C() <-chan *Event
+
+	// Insert time
+	InsertTime() time.Time
+
+	// The tick duration original set
+	Duration() time.Duration
+
+	// Fired count
+	Fired() int64
 }
 
-//Entry
-func NewTimer() Timer {
-	return newTimingwheel()
+type Event struct {
+	Duration   time.Duration
+	InsertTIme time.Time
+	Data       interface{}
+	Error      error
+}
+
+// Entry
+func NewTimer(opts ...TimerOption) Timer {
+	return newTimingwheel(opts...)
 }
