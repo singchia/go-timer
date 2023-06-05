@@ -120,12 +120,6 @@ func (tw *timingwheel) setWheels(max uint64, length int) {
 }
 
 func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
-	tw.mtx.RLock()
-	defer tw.mtx.RUnlock()
-	if tw.twStatus != twStatusStarted {
-		return nil
-	}
-
 	tick := &tick{
 		duration:   d,
 		tw:         tw,
@@ -138,6 +132,19 @@ func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
 	}
 	if tick.ch == nil && tick.handler == nil {
 		tick.ch = make(chan *Event, 1)
+	}
+	tw.mtx.RLock()
+	defer tw.mtx.RUnlock()
+
+	if tw.twStatus != twStatusStarted {
+		event := &Event{
+			Duration:   tick.duration,
+			InsertTIme: tick.insertTime,
+			Data:       tick.data,
+			Error:      ErrTimerNotStarted,
+		}
+		tick.ch <- event
+		return tick
 	}
 	tw.operations <- &operation{
 		tick:     tick,
@@ -273,6 +280,7 @@ func (tw *timingwheel) drive() {
 						err:         ErrTimerForceClosed,
 					}
 				case operAdd:
+					tw.handleError(operation.tick)
 					continue
 				}
 			}
