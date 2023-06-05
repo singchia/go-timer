@@ -6,12 +6,10 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"os/signal"
 	"sync/atomic"
-	"syscall"
 	"time"
 
-	"github.com/singchia/go-timer"
+	"github.com/singchia/go-timer/v2"
 )
 
 func main() {
@@ -25,24 +23,24 @@ func main() {
 	tw.Start()
 	fired := int32(0)
 	for i := 0; i < n; i++ {
-		second := uint64(rand.Intn(10) + 1)
-		tick, err := tw.Time(second, time.Now(), nil, func(data interface{}) error {
+		second := time.Duration(rand.Intn(10)+1) * time.Second
+		tick := tw.Add(second, timer.WithData(time.Now()), timer.WithHandler(func(event *timer.Event) {
 			atomic.AddInt32(&fired, 1)
-			return nil
-		})
+		}))
+		err := tick.Cancel()
 		if err != nil {
 			log.Fatal(err)
+			return
 		}
-		tick.Cancel()
 	}
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	tick := tw.Add(time.Second, timer.WithCyclically())
 	for {
 		select {
 		case <-sigs:
 			goto END
-		case <-time.NewTimer(time.Second).C:
+		case <-tick.C():
 			log.Println(n, fired)
 		}
 	}
