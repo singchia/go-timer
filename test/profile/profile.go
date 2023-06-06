@@ -10,7 +10,6 @@ import (
 func main() {
 
 	tw := gotime.NewTimer()
-	tw.Start()
 	ch := make(chan struct{}, 1024)
 
 	http.HandleFunc("/bench", func(w http.ResponseWriter, req *http.Request) {

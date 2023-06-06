@@ -8,8 +8,7 @@ import (
 )
 
 func main() {
-	t := timer.NewTimer()
-	t.Start()
+	t := timer.NewTimer(timer.WithTimeInterval(time.Millisecond))
 	ch := make(chan *timer.Event)
 	old := time.Now()
 

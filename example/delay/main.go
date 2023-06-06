@@ -23,7 +23,6 @@ func main() {
 	n := 100000
 	delay := 14 * time.Second
 	tw := timer.NewTimer()
-	tw.Start()
 	fired := int32(0)
 	for i := 0; i < n; i++ {
 		second := time.Duration(rand.Intn(10)+1) * time.Second

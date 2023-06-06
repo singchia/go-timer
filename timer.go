@@ -47,9 +47,6 @@ func WithHandler(handler func(*Event)) TickOption {
 type Timer interface {
 	Add(d time.Duration, opts ...TickOption) Tick
 
-	// Start to start timer.
-	Start()
-
 	// Close to close timer,
 	// all ticks set would be discarded.
 	Close()

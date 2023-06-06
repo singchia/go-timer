@@ -19,8 +19,7 @@ func main() {
 	}
 	go server.ListenAndServe()
 	n := 100000
-	tw := timer.NewTimer()
-	tw.Start()
+	tw := timer.NewTimer(timer.WithTimeInterval(time.Millisecond))
 	fired := int32(0)
 	for i := 0; i < n; i++ {
 		second := time.Duration(rand.Intn(10)+1) * time.Second
