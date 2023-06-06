@@ -68,6 +68,7 @@ func (t *tick) Reset(data interface{}) error {
 	return ret.err
 }
 
+// Don't cancel the tick in timeout handler, it may cause the block when buffer is fulfilled.
 func (t *tick) Cancel() error {
 	t.tw.mtx.RLock()
 	defer t.tw.mtx.RUnlock()

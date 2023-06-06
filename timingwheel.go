@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultTickInterval time.Duration = 100 * time.Millisecond
+	defaultTickInterval time.Duration = 10 * time.Millisecond
 	defaultTicks        uint64        = 1024 * 1024 * 1024 * 1024
 	defaultSlots        uint          = 256
 )
@@ -108,6 +108,7 @@ func newTimingwheel(opts ...TimerOption) *timingwheel {
 	tw.setWheels(max, length)
 	tw.sch.SetMaxGoroutines(1000)
 	tw.sch.StartSchedule()
+	tw.Start()
 	return tw
 }
 
@@ -137,13 +138,7 @@ func (tw *timingwheel) Add(d time.Duration, opts ...TickOption) Tick {
 	defer tw.mtx.RUnlock()
 
 	if tw.twStatus != twStatusStarted {
-		event := &Event{
-			Duration:   tick.duration,
-			InsertTIme: tick.insertTime,
-			Data:       tick.data,
-			Error:      ErrTimerNotStarted,
-		}
-		tick.ch <- event
+		tw.handleError(tick, ErrTimerNotStarted)
 		return tick
 	}
 	tw.operations <- &operation{
@@ -280,7 +275,7 @@ func (tw *timingwheel) drive() {
 						err:         ErrTimerForceClosed,
 					}
 				case operAdd:
-					tw.handleError(operation.tick)
+					tw.handleError(operation.tick, ErrTimerForceClosed)
 					continue
 				}
 			}
@@ -342,11 +337,15 @@ func (tw *timingwheel) forceClose(data interface{}) error {
 		return nil
 	}
 	tick.status = statusFire
-	tw.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: tw.handleError})
+	tw.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: tw.handleForceClosed})
 	return nil
 }
 
-func (tw *timingwheel) handleError(data interface{}) {
+func (tw *timingwheel) handleForceClosed(data interface{}) {
+	tw.handleError(data, ErrTimerForceClosed)
+}
+
+func (tw *timingwheel) handleError(data interface{}, err error) {
 	tk, _ := data.(*tick)
 	if tk.status == statusCanceled {
 		return
@@ -355,7 +354,7 @@ func (tw *timingwheel) handleError(data interface{}) {
 		Duration:   tk.duration,
 		InsertTIme: tk.insertTime,
 		Data:       tk.data,
-		Error:      ErrTimerForceClosed,
+		Error:      err,
 	}
 	if tk.ch == nil {
 		tk.handler(event)
@@ -408,10 +407,11 @@ func (tw *timingwheel) indexesPerWheelBased(d time.Duration, base []uint) []uint
 			break
 		}
 		if len(base) <= i {
-			ipw = append(ipw, uint(quotient))
-			break
+			quotient += uint64(tw.wheels[i].cur)
+		} else {
+			quotient += uint64(base[i])
 		}
-		quotient += uint64(base[i])
+
 		reminder = quotient % uint64(wheel.numSlots)
 		quotient = quotient / uint64(wheel.numSlots)
 		ipw = append(ipw, uint(reminder))

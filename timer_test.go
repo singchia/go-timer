@@ -7,7 +7,6 @@ import (
 
 func TestGoTimer(t *testing.T) {
 	tw := NewTimer()
-	tw.Start()
 
 	tick := tw.Add(time.Second)
 	<-tick.C()
@@ -16,7 +15,6 @@ func TestGoTimer(t *testing.T) {
 
 func BenchmarkGoTimer(b *testing.B) {
 	tw := NewTimer()
-	tw.Start()
 
 	for i := 0; i < b.N; i++ {
 		tw.Add(time.Second, WithHandler(func(event *Event) {

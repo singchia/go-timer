@@ -61,7 +61,6 @@ func buildinTime(count int) (tolerance int64) {
 func goTime(count int) (tolerance int64) {
 	var wait sync.WaitGroup
 	tw := gotime.NewTimer(gotime.WithTimeInterval(time.Microsecond))
-	tw.Start()
 	for i := 0; i < count; i++ {
 		wait.Add(1)
 		t := time.Now()
