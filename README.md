@@ -6,7 +6,7 @@
 
 A high performance timer with minimal goroutines.
 
-## Getting Start
+## Getting Started
 
 ```golang
 package main
