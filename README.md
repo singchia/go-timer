@@ -17,6 +17,8 @@ A high performance timer with minimal goroutines.
 * One goroutine runs all
 * High performance in timing-wheels algorithm
 * Minimal resources use
+* Managed data and handler
+* Customizing channel
 * Well tested
 
 ## Usage
@@ -34,11 +36,65 @@ import (
 )
 
 func main() {
+	t1 := time.Now()
+
+	t := timer.NewTimer()
+	tick := t.Add(time.Second)
+	<-tick.C()
+
+	log.Printf("time elapsed: %fs\n", time.Now().Sub(t1).Seconds())
+}
+```
+
+### Async handler
+
+```golang
+package main
+
+import (
+	"log"
+	"sync"
+	"time"
+
+	timer "github.com/singchia/go-timer/v2"
+)
+
+func main() {
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	t := timer.NewTimer()
+	t.Add(time.Second, timer.WithData(time.Now()), timer.WithHandler(func(event *timer.Event) {
+		defer wg.Done()
+		log.Printf("time elapsed: %fs\n", time.Now().Sub(event.Data.(time.Time)).Seconds())
+	}))
+
+	wg.Wait()
+}
+```
+
+### With cyclically
+
+```golang
+package main
+
+import (
+	"log"
+	"time"
+
+	timer "github.com/singchia/go-timer/v2"
+)
+
+func main() {
+	t1 := time.Now()
+
 	t := timer.NewTimer()
 	tick := t.Add(time.Second, timer.WithCyclically())
 	for {
 		<-tick.C()
-		log.Println(time.Now())
+		t2 := time.Now()
+		log.Printf("time elapsed: %fs\n", t2.Sub(t1).Seconds())
+		t1 = t2
 	}
 }
 ```

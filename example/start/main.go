@@ -8,10 +8,11 @@ import (
 )
 
 func main() {
+	t1 := time.Now()
+
 	t := timer.NewTimer()
-	tick := t.Add(time.Second, timer.WithCyclically())
-	for {
-		<-tick.C()
-		log.Println(time.Now())
-	}
+	tick := t.Add(time.Second)
+	<-tick.C()
+
+	log.Printf("time elapsed: %fs\n", time.Now().Sub(t1).Seconds())
 }
