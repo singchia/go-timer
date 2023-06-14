@@ -15,7 +15,9 @@ A high performance timer with minimal goroutines.
 ### Features
 
 * One goroutine runs all
-* High performance in timing-wheels algorithm
+* Goroutine safe
+* Clean and simple, no third-party deps at all
+* High performance with timing-wheels algorithm
 * Minimal resources use
 * Managed data and handler
 * Customizing channel
@@ -37,11 +39,13 @@ import (
 
 func main() {
 	t1 := time.Now()
-
+	// new timer
 	t := timer.NewTimer()
+	// add a tick in 1s
 	tick := t.Add(time.Second)
+	// wait for it
 	<-tick.C()
-
+	// tick fired as time is up, calcurate and print the elapse
 	log.Printf("time elapsed: %fs\n", time.Now().Sub(t1).Seconds())
 }
 ```
@@ -60,12 +64,15 @@ import (
 )
 
 func main() {
+	// we need a wait group since using async handler
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-
+	// new timer
 	t := timer.NewTimer()
+	// add a tick in 1s with current time and a async handler
 	t.Add(time.Second, timer.WithData(time.Now()), timer.WithHandler(func(event *timer.Event) {
 		defer wg.Done()
+		// tick fired as time is up, calcurate and print the elapse
 		log.Printf("time elapsed: %fs\n", time.Now().Sub(event.Data.(time.Time)).Seconds())
 	}))
 
@@ -87,12 +94,15 @@ import (
 
 func main() {
 	t1 := time.Now()
-
+	// new timer
 	t := timer.NewTimer()
+	// add cyclical tick in 1s
 	tick := t.Add(time.Second, timer.WithCyclically())
 	for {
+		// wait for it cyclically
 		<-tick.C()
 		t2 := time.Now()
+		// calcurate and print the elapse
 		log.Printf("time elapsed: %fs\n", t2.Sub(t1).Seconds())
 		t1 = t2
 	}
