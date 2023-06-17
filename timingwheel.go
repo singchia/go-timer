@@ -73,7 +73,8 @@ type operationRet struct {
 
 // timer options
 type timerOption struct {
-	interval time.Duration
+	interval            time.Duration
+	operationBufferSize int
 }
 
 type timingwheel struct {
@@ -93,11 +94,11 @@ type timingwheel struct {
 func newTimingwheel(opts ...TimerOption) *timingwheel {
 	max, length := calcuWheels(defaultTicks)
 	tw := &timingwheel{
-		twStatus:   twStatusInit,
-		sch:        scheduler.NewScheduler(),
-		operations: make(chan *operation, 1024),
+		twStatus: twStatusInit,
+		sch:      scheduler.NewScheduler(),
 		timerOption: &timerOption{
-			interval: defaultTickInterval,
+			interval:            defaultTickInterval,
+			operationBufferSize: 128,
 		},
 		pause: make(chan struct{}),
 		quit:  make(chan struct{}),
@@ -105,6 +106,7 @@ func newTimingwheel(opts ...TimerOption) *timingwheel {
 	for _, opt := range opts {
 		opt(tw.timerOption)
 	}
+	tw.operations = make(chan *operation, tw.operationBufferSize)
 	tw.setWheels(max, length)
 	tw.sch.SetMaxGoroutines(1000)
 	tw.sch.StartSchedule()
@@ -199,7 +201,7 @@ func (tw *timingwheel) drive() {
 			// fire all ready tick
 			for _, wheel := range tw.wheels {
 				linker := wheel.incN(1)
-				if linker.Length() > 0 {
+				if linker != nil && linker.Length() > 0 {
 					linker.Foreach(tw.iterate)
 				}
 				if wheel.cur != 0 {
@@ -360,6 +362,9 @@ func (tw *timingwheel) handleError(data interface{}, err error) {
 		tk.handler(event)
 	} else {
 		tk.ch <- event
+		if !tk.chOutside {
+			close(tk.ch)
+		}
 	}
 }
 

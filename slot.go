@@ -21,6 +21,10 @@ func newSlot(w *wheel) *slot {
 	return &slot{w: w, dlinker: linker.NewDoublinker()}
 }
 
+func (s *slot) length() int64 {
+	return s.dlinker.Length()
+}
+
 func (s *slot) add(tick *tick) *tick {
 	doubID := s.dlinker.Add(tick)
 	tick.id = doubID
@@ -43,5 +47,8 @@ func (s *slot) remove() *linker.Doublinker {
 }
 
 func (s *slot) foreach(handler linker.ForeachFunc) error {
+	if s == nil {
+		return nil
+	}
 	return s.dlinker.Foreach(handler)
 }

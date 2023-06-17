@@ -18,6 +18,7 @@ import (
 type tickOption struct {
 	data       interface{}
 	ch         chan *Event
+	chOutside  bool
 	handler    func(*Event)
 	cyclically bool
 }

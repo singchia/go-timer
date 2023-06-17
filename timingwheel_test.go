@@ -15,3 +15,8 @@ func Test_indexesPerWheel(t *testing.T) {
 	t.Log(ipw)
 	return
 }
+
+func Test_calcuWheels(t *testing.T) {
+	max, length := calcuWheels(defaultTicks)
+	t.Log(max, length)
+}

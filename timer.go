@@ -18,6 +18,12 @@ func WithTimeInterval(interval time.Duration) TimerOption {
 	}
 }
 
+func WithOperationBufferSize(n int) TimerOption {
+	return func(to *timerOption) {
+		to.operationBufferSize = n
+	}
+}
+
 type TickOption func(*tickOption)
 
 func WithData(data interface{}) TickOption {
@@ -35,6 +41,7 @@ func WithCyclically() TickOption {
 func WithChan(C chan *Event) TickOption {
 	return func(to *tickOption) {
 		to.ch = C
+		to.chOutside = true
 	}
 }
 
