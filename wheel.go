@@ -5,8 +5,6 @@ import (
 )
 
 type wheel struct {
-	//keep the reference to for Tick(Tick-->slot-->wheel-->timingwheel-->wheels)
-	tw       *timingwheel
 	slots    []*slot
 	cur      uint
 	numSlots uint
@@ -14,9 +12,9 @@ type wheel struct {
 	position uint
 }
 
-func newWheel(t *timingwheel, numSlots uint, position uint) *wheel {
+func newWheel(numSlots uint, position uint) *wheel {
 	slots := make([]*slot, numSlots, numSlots)
-	wil := &wheel{tw: t, cur: 0, numSlots: numSlots, position: position}
+	wil := &wheel{cur: 0, numSlots: numSlots, position: position}
 	wil.slots = slots
 	return wil
 }

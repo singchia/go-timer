@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2021 Austin Zhai <singchia@163.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- */
 package timer
 
 import (
@@ -43,6 +35,16 @@ func (s *slot) update(tick *tick, data interface{}) {
 func (s *slot) remove() *linker.Doublinker {
 	temp := s.dlinker
 	s.dlinker = linker.NewDoublinker()
+	return temp
+}
+
+func (s *slot) close() *linker.Doublinker {
+	if s == nil {
+		return nil
+	}
+	s.w = nil
+	temp := s.dlinker
+	s.dlinker = nil
 	return temp
 }
 

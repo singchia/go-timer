@@ -10,6 +10,7 @@ package timer
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -118,7 +119,7 @@ func (tw *timingwheel) setWheels(max uint64, length int) {
 	tw.wheels = make([]*wheel, 0, length)
 	tw.max = max
 	for i := uint(0); i < uint(length); i++ {
-		tw.wheels = append(tw.wheels, newWheel(tw, defaultSlots, i))
+		tw.wheels = append(tw.wheels, newWheel(defaultSlots, i))
 	}
 }
 
@@ -188,13 +189,14 @@ func (tw *timingwheel) Close() {
 	if tw.twStatus != twStatusStarted {
 		return
 	}
-	tw.quit <- struct{}{}
-	close(tw.operations)
+	close(tw.quit)
 	tw.twStatus = twStatusStoped
 }
 
 func (tw *timingwheel) drive() {
 	driver := time.NewTicker(tw.interval)
+	defer driver.Stop()
+
 	for {
 		select {
 		case <-driver.C:
@@ -269,6 +271,7 @@ func (tw *timingwheel) drive() {
 		case <-tw.pause:
 			return
 		case <-tw.quit:
+			close(tw.operations)
 			for operation := range tw.operations {
 				switch operation.operType {
 				case operCancel, operDelay, operReset:
@@ -286,12 +289,17 @@ func (tw *timingwheel) drive() {
 					slot.foreach(tw.forceClose)
 				}
 			}
+			// accelerate gc
 			tw.sch.Close()
-			goto END
+			tw.wheels = nil
+			tw.operations = nil
+			tw.sch = nil
+			tw.quit = nil
+			tw.pause = nil
+			fmt.Println("timer done")
+			return
 		}
 	}
-END:
-	driver.Stop()
 }
 
 func (tw *timingwheel) iterate(data interface{}) error {
@@ -309,6 +317,7 @@ func (tw *timingwheel) iterate(data interface{}) error {
 	}
 	tk.status = statusFire
 	if !tk.cyclically {
+		tk.tw, tk.s, tk.ipw, tk.id = nil, nil, nil, nil
 		tw.sch.PublishRequest(&scheduler.Request{Data: tk, Handler: tw.handleNormal})
 		return nil
 	}
@@ -332,12 +341,12 @@ func (tw *timingwheel) iterate(data interface{}) error {
 	return nil
 }
 
-// TODO
 func (tw *timingwheel) forceClose(data interface{}) error {
 	tick, _ := data.(*tick)
 	if tick.status == statusCanceled {
 		return nil
 	}
+	tick.tw, tick.s, tick.ipw, tick.id = nil, nil, nil, nil
 	tick.status = statusFire
 	tw.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: tw.handleForceClosed})
 	return nil
