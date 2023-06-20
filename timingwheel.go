@@ -10,7 +10,6 @@ package timer
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -296,7 +295,6 @@ func (tw *timingwheel) drive() {
 			tw.sch = nil
 			tw.quit = nil
 			tw.pause = nil
-			fmt.Println("timer done")
 			return
 		}
 	}
