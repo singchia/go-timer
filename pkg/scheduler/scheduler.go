@@ -118,10 +118,11 @@ func (s *Scheduler) control() {
 		s.Interval = time.Millisecond * 200
 	}
 
-	timer := time.NewTicker(s.Interval)
+	ticker := time.NewTicker(s.Interval)
+	defer ticker.Stop()
 	for {
 		select {
-		case _, ok := <-timer.C:
+		case _, ok := <-ticker.C:
 			if !ok {
 				return
 			}

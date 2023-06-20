@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2021 Austin Zhai <singchia@163.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- */
 package timer
 
 import (
@@ -19,6 +11,10 @@ type slot struct {
 
 func newSlot(w *wheel) *slot {
 	return &slot{w: w, dlinker: linker.NewDoublinker()}
+}
+
+func (s *slot) length() int64 {
+	return s.dlinker.Length()
 }
 
 func (s *slot) add(tick *tick) *tick {
@@ -42,6 +38,19 @@ func (s *slot) remove() *linker.Doublinker {
 	return temp
 }
 
+func (s *slot) close() *linker.Doublinker {
+	if s == nil {
+		return nil
+	}
+	s.w = nil
+	temp := s.dlinker
+	s.dlinker = nil
+	return temp
+}
+
 func (s *slot) foreach(handler linker.ForeachFunc) error {
+	if s == nil {
+		return nil
+	}
 	return s.dlinker.Foreach(handler)
 }

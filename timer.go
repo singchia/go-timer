@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2021 Austin Zhai <singchia@163.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- */
 package timer
 
 import "time"
@@ -15,6 +7,12 @@ type TimerOption func(*timerOption)
 func WithTimeInterval(interval time.Duration) TimerOption {
 	return func(to *timerOption) {
 		to.interval = interval
+	}
+}
+
+func WithOperationBufferSize(n int) TimerOption {
+	return func(to *timerOption) {
+		to.operationBufferSize = n
 	}
 }
 
@@ -35,6 +33,7 @@ func WithCyclically() TickOption {
 func WithChan(C chan *Event) TickOption {
 	return func(to *tickOption) {
 		to.ch = C
+		to.chOutside = true
 	}
 }
 

@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2021 Austin Zhai <singchia@163.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- */
 package timer
 
 import (
@@ -18,6 +10,7 @@ import (
 type tickOption struct {
 	data       interface{}
 	ch         chan *Event
+	chOutside  bool
 	handler    func(*Event)
 	cyclically bool
 }
@@ -69,6 +62,7 @@ func (t *tick) Reset(data interface{}) error {
 }
 
 // Don't cancel the tick in timeout handler, it may cause the block when buffer is fulfilled.
+// The cancel operation may not work when the tick is about to time up.
 func (t *tick) Cancel() error {
 	t.tw.mtx.RLock()
 	defer t.tw.mtx.RUnlock()

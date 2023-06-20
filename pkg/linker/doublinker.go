@@ -1,11 +1,3 @@
-/*
- * Copyright (c) 2021 Austin Zhai <singchia@163.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- */
 package linker
 
 import (
@@ -16,8 +8,8 @@ type HasEqual interface {
 	Equal(src interface{}) bool
 }
 
-//we don't want generate a int64 to index the concrete node
-//pointer is the best index
+// we don't want generate a int64 to index the concrete node
+// pointer is the best index
 type DoubID *doubnode
 
 type Doublinker struct {
@@ -38,14 +30,14 @@ func (d *Doublinker) Length() int64 {
 	return d.length
 }
 
-//when node is deleted
+// when node is deleted
 type doubnode struct {
 	data interface{}
 	next *doubnode
 	prev *doubnode
 }
 
-//append a node at tail
+// append a node at tail
 func (d *Doublinker) Add(data interface{}) DoubID {
 	node := &doubnode{data: data, next: nil, prev: nil}
 
@@ -192,7 +184,7 @@ func (d *Doublinker) RetrieveFree(id DoubID) interface{} {
 	return node.data
 }
 
-//move to another doublinker
+// move to another doublinker
 func (d *Doublinker) UniqueMove(data interface{}, dst *Doublinker) error {
 	if data == nil || dst == nil {
 		return errors.New("data or dst doublinker empty")
@@ -233,7 +225,7 @@ func (d *Doublinker) UniqueMove(data interface{}, dst *Doublinker) error {
 	return dst.Take(node)
 }
 
-//move to another doublinker
+// move to another doublinker
 func (d *Doublinker) Move(id DoubID, dst *Doublinker) error {
 	if id == nil || dst == nil {
 		return errors.New("id or dst doublinker empty")
