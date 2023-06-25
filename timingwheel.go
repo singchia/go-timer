@@ -315,7 +315,6 @@ func (tw *timingwheel) iterate(data interface{}) error {
 	}
 	tk.status = statusFire
 	if !tk.cyclically {
-		tk.tw, tk.s, tk.ipw, tk.id = nil, nil, nil, nil
 		tw.sch.PublishRequest(&scheduler.Request{Data: tk, Handler: tw.handleNormal})
 		return nil
 	}
@@ -344,7 +343,6 @@ func (tw *timingwheel) forceClose(data interface{}) error {
 	if tick.status == statusCanceled {
 		return nil
 	}
-	tick.tw, tick.s, tick.ipw, tick.id = nil, nil, nil, nil
 	tick.status = statusFire
 	tw.sch.PublishRequest(&scheduler.Request{Data: tick, Handler: tw.handleForceClosed})
 	return nil
