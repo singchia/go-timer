@@ -45,7 +45,7 @@ func main() {
 	tick := t.Add(time.Second)
 	// wait for it
 	<-tick.C()
-	// tick fired as time is up, calcurate and print the elapse
+	// tick fired as time is up, calculate and print the elapse
 	log.Printf("time elapsed: %fs\n", time.Now().Sub(t1).Seconds())
 }
 ```
@@ -72,7 +72,7 @@ func main() {
 	// add a tick in 1s with current time and a async handler
 	t.Add(time.Second, timer.WithData(time.Now()), timer.WithHandler(func(event *timer.Event) {
 		defer wg.Done()
-		// tick fired as time is up, calcurate and print the elapse
+		// tick fired as time is up, calculate and print the elapse
 		log.Printf("time elapsed: %fs\n", time.Now().Sub(event.Data.(time.Time)).Seconds())
 	}))
 
@@ -102,7 +102,7 @@ func main() {
 		// wait for it cyclically
 		<-tick.C()
 		t2 := time.Now()
-		// calcurate and print the elapse
+		// calculate and print the elapse
 		log.Printf("time elapsed: %fs\n", t2.Sub(t1).Seconds())
 		t1 = t2
 	}
