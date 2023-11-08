@@ -47,6 +47,12 @@ type tick struct {
 
 // TODO revision
 func (t *tick) Reset(data interface{}) error {
+	t.tw.mtx.RLock()
+	defer t.tw.mtx.RUnlock()
+	if t.tw.twStatus != twStatusStarted {
+		return ErrTimerNotStarted
+	}
+
 	ch := make(chan *operationRet)
 	t.tw.operations <- &operation{
 		tick:     t,
@@ -66,6 +72,9 @@ func (t *tick) Reset(data interface{}) error {
 func (t *tick) Cancel() error {
 	t.tw.mtx.RLock()
 	defer t.tw.mtx.RUnlock()
+	if t.tw.twStatus != twStatusStarted {
+		return ErrTimerNotStarted
+	}
 
 	ch := make(chan *operationRet)
 	t.tw.operations <- &operation{
@@ -84,6 +93,11 @@ func (t *tick) Cancel() error {
 func (t *tick) Delay(d time.Duration) error {
 	if t.cyclically {
 		return ErrDelayOnCyclically
+	}
+	t.tw.mtx.RLock()
+	defer t.tw.mtx.RUnlock()
+	if t.tw.twStatus != twStatusStarted {
+		return ErrTimerNotStarted
 	}
 	ch := make(chan *operationRet)
 	t.tw.operations <- &operation{
