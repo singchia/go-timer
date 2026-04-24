@@ -127,10 +127,16 @@ func (s *Scheduler) control() {
 				return
 			}
 			numActives := atomic.LoadInt64(&s.numActives)
-			incomingReqsDiff := s.countIncomingReqs - s.countIncomingReqsL
-			processedReqsDiff := s.countProcessedReqs - s.countProcessedReqsL
-			s.countIncomingReqsL = s.countIncomingReqs
-			s.countProcessedReqsL = s.countProcessedReqs
+			// Snapshot the two counters with a single atomic load each so
+			// the diff and the baseline update see the same value. Worker
+			// goroutines write these via atomic.AddInt64; plain reads here
+			// are a data race under -race.
+			incoming := atomic.LoadInt64(&s.countIncomingReqs)
+			processed := atomic.LoadInt64(&s.countProcessedReqs)
+			incomingReqsDiff := incoming - s.countIncomingReqsL
+			processedReqsDiff := processed - s.countProcessedReqsL
+			s.countIncomingReqsL = incoming
+			s.countProcessedReqsL = processed
 
 			s.runtimeLock.RLock()
 			shift := s.strategy.ExpandOrShrink(incomingReqsDiff, processedReqsDiff, numActives)
